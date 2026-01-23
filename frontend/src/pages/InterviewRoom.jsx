@@ -1,0 +1,365 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import 'regenerator-runtime/runtime';
+import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
+import { useTTS } from '../hooks/useTTS';
+import { useAuthStore } from '../store/useAuthStore';
+import {
+    Mic, MicOff, PhoneOff, Video, VideoOff,
+    Monitor, Captions, PlayCircle, Code
+} from 'lucide-react';
+
+export const InterviewRoom = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const videoRef = useRef(null);
+    const [ws, setWs] = useState(null);
+
+    // UX State
+    const [started, setStarted] = useState(false);
+    const [showCaptions, setShowCaptions] = useState(false);
+    const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+    const [isMuted, setIsMuted] = useState(false);
+    const [isScreenSharing, setIsScreenSharing] = useState(false);
+    const [showCodeEditor, setShowCodeEditor] = useState(false);
+    const [code, setCode] = useState("// Type your code here if asked...");
+    const [language, setLanguage] = useState("javascript"); // Added language state
+
+    // Voice Hooks
+    const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition();
+    const { speak, cancel: cancelTTS, speaking: aiSpeaking } = useTTS();
+    const [aiResponse, setAiResponse] = useState("Connected. Waiting for you to start...");
+
+    // Timers
+    const [remainingTime, setRemainingTime] = useState(600); // 10 minutes countdown
+    const [thinkTime, setThinkTime] = useState(0);
+
+    const token = useAuthStore(state => state.token);
+
+    // ================= EFFECT HOOKS =================
+
+    // 1. Cleanup TTS
+    useEffect(() => {
+        return () => cancelTTS();
+    }, [cancelTTS]);
+
+    // 2. Global Timer (Countdown)
+    useEffect(() => {
+        if (!started || remainingTime <= 0) return;
+        const interval = setInterval(() => setRemainingTime(t => Math.max(0, t - 1)), 1000);
+        return () => clearInterval(interval);
+    }, [started, remainingTime]);
+
+    // 3. Think Time
+    useEffect(() => {
+        let interval;
+        if (!aiSpeaking && thinkTime > 0) {
+            interval = setInterval(() => setThinkTime(t => t - 1), 1000);
+        }
+        return () => clearInterval(interval);
+    }, [aiSpeaking, thinkTime]);
+
+    // 4. Media Setup (Camera or Screen)
+    useEffect(() => {
+        if (!started) return;
+
+        const startMedia = async () => {
+            try {
+                let stream;
+                if (isScreenSharing) {
+                    // Screen Share
+                    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                    // Handle user stopping screen share via browser UI
+                    stream.getVideoTracks()[0].onended = () => {
+                        setIsScreenSharing(false);
+                    };
+                } else {
+                    // Camera
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                }
+
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                }
+            } catch (err) {
+                console.error("Media Error:", err);
+                // If screen share fails (e.g. cancelled), fallback to camera
+                if (isScreenSharing) setIsScreenSharing(false);
+            }
+        };
+
+        startMedia();
+    }, [started, isScreenSharing]);
+
+    // 5. Toggle Video Track (Mute Video)
+    useEffect(() => {
+        if (videoRef.current && videoRef.current.srcObject) {
+            const stream = videoRef.current.srcObject;
+            // Only affect video tracks if we are NOT screen sharing (don't black out screen share)
+            if (!isScreenSharing) {
+                stream.getVideoTracks().forEach(track => track.enabled = isVideoEnabled);
+            }
+        }
+    }, [isVideoEnabled, isScreenSharing]);
+
+    // 6. WebSocket Setup
+    useEffect(() => {
+        if (!token || !id || !started) return;
+
+        const socket = new WebSocket(`ws://localhost:8000/interview/ws/${id}?token=${token}`);
+
+        socket.onopen = () => console.log("WS Connected");
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'ai_response') {
+                setAiResponse(data.content);
+                speak(data.content);
+                setThinkTime(10);
+
+                if (data.content.includes("thank you") || data.content.includes("Goodbye")) {
+                    // Optional auto-redirect logic
+                    // setTimeout(() => navigate(`/code-test/${id}`), 6000);
+                }
+            }
+        };
+
+        socket.onclose = () => console.log("WS Disconnected");
+        setWs(socket);
+        return () => socket.close();
+    }, [id, token, speak, navigate, started]);
+
+    // 7. Speech Logic
+    useEffect(() => {
+        if (!started) return;
+
+        if (aiSpeaking) {
+            SpeechRecognition.stopListening();
+        } else {
+            if (!isMuted) {
+                SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
+            } else {
+                SpeechRecognition.stopListening();
+            }
+        }
+    }, [aiSpeaking, started, isMuted]);
+
+    // 8. Transcript Sender
+    useEffect(() => {
+        if (transcript) setThinkTime(0);
+
+        const handler = setTimeout(() => {
+            if (transcript && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'user_audio_text', content: transcript }));
+                resetTranscript();
+            }
+        }, 3000); // Increased debounce to 3s for better accuracy
+
+        return () => clearTimeout(handler);
+    }, [transcript, ws, resetTranscript]);
+
+
+    // ================= RENDER =================
+
+    console.log("RENDER DEBUG:", { started, browserSupportsSpeechRecognition });
+
+    if (!browserSupportsSpeechRecognition) return <div className="p-10 text-white">Browser doesn't support speech recognition. Use Chrome.</div>;
+
+    // OVERLAY: Start Interview
+    if (!started) {
+        return (
+            <div className="flex bg-gray-900 h-screen items-center justify-center p-4">
+                <div className="bg-gray-800 p-10 rounded-2xl text-center shadow-2xl border border-gray-700 max-w-lg w-full relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-2 bg-blue-500"></div>
+                    <div className="mb-6 bg-blue-900/30 w-20 h-20 rounded-full flex items-center justify-center mx-auto text-blue-400">
+                        <Mic size={40} />
+                    </div>
+                    <h1 className="text-3xl font-bold mb-3 text-white">Ready to Start?</h1>
+                    <p className="text-gray-400 mb-8 leading-relaxed">
+                        The AI Interviewer is ready. Check your camera and microphone.
+                    </p>
+                    <button
+                        onClick={() => {
+                            setStarted(true);
+                            if (window.speechSynthesis) {
+                                window.speechSynthesis.resume();
+                                window.speechSynthesis.speak(new SpeechSynthesisUtterance(" "));
+                            }
+                        }}
+                        className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-blue-500/20 transition-all transform hover:scale-[1.02]"
+                    >
+                        Start Interview
+                    </button>
+                    <p className="mt-4 text-xs text-gray-500">Allow Camera & Screen Share permissions when prompted.</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col md:flex-row h-screen bg-gray-950 text-white p-4 gap-4 overflow-hidden relative">
+
+            {/* LEFT: AI & Info */}
+            <div className={`${showCodeEditor ? 'w-1/4' : 'w-1/3'} flex flex-col gap-4 transition-all duration-300 hidden md:flex`}>
+                <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800 flex-1 flex flex-col justify-center items-center relative shadow-inner">
+                    {/* Think Buffer */}
+                    {thinkTime > 0 && !aiSpeaking && (
+                        <div className="absolute top-4 left-4 right-4 bg-blue-950/50 rounded-lg p-2 text-center border border-blue-900/50">
+                            <span className="text-xs font-bold text-blue-300">Think Time: {thinkTime}s</span>
+                            <div className="h-1 bg-blue-500 rounded-full w-full mt-1"></div>
+                        </div>
+                    )}
+
+                    <div className={`rounded-full flex items-center justify-center transition-all duration-500 ${aiSpeaking ? 'bg-blue-600 scale-105 shadow-[0_0_50px_blue]' : 'bg-gray-800'} ${showCodeEditor ? 'w-32 h-32 text-4xl' : 'w-56 h-56 text-7xl'}`}>
+                        {aiSpeaking ? '🔊' : '🤖'}
+                    </div>
+
+                    <div className="text-center w-full mt-6">
+                        <h3 className="text-xl font-bold text-white">AI Interviewer</h3>
+                        <div className="min-h-[4rem] flex flex-col items-center justify-center">
+                            {showCaptions && (
+                                <p className="text-gray-300 text-sm italic px-2 mt-2 h-20 overflow-y-auto custom-scrollbar">"{aiResponse}"</p>
+                            )}
+                        </div>
+                        {!aiSpeaking && (
+                            <button onClick={() => speak(aiResponse)} className="mt-2 text-xs text-blue-400 hover:underline flex items-center gap-1 mx-auto">
+                                <PlayCircle size={12} /> Replay Audio
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Timer */}
+                <div className="bg-gray-900 p-4 rounded-2xl border border-gray-800 flex justify-between items-center px-8">
+                    <span className={`text-2xl font-mono font-bold ${remainingTime < 60 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                        {Math.floor(remainingTime / 60)}:{(remainingTime % 60).toString().padStart(2, '0')}
+                    </span>
+                    <span className="text-xs text-gray-500 font-bold tracking-widest">REMAINING</span>
+                </div>
+            </div>
+
+            {/* MIDDLE: Code Editor (Conditional) */}
+            {showCodeEditor && (
+                <div className="flex-1 bg-gray-900 rounded-2xl border border-gray-700 flex flex-col overflow-hidden animate-fade-in-up shadow-2xl z-10">
+                    <div className="bg-gray-800 p-3 border-b border-gray-700 flex justify-between items-center">
+                        <span className="font-bold text-sm text-gray-300 pl-2">Live Codepad</span>
+                        <div className="flex gap-2">
+                            <select
+                                value={language}
+                                onChange={(e) => setLanguage(e.target.value)}
+                                className="bg-gray-900 text-xs text-gray-300 px-2 py-1 rounded border border-gray-700 focus:outline-none focus:border-blue-500"
+                            >
+                                <option value="javascript">JavaScript</option>
+                                <option value="python">Python</option>
+                                <option value="java">Java</option>
+                                <option value="cpp">C++</option>
+                            </select>
+                        </div>
+                    </div>
+                    <textarea
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                        className="flex-1 bg-[#1e1e1e] p-6 font-mono text-sm text-green-400 focus:outline-none resize-none leading-relaxed"
+                        spellCheck={false}
+                        placeholder={`// Write your ${language} code here...`}
+                    />
+                </div>
+            )}
+
+            {/* RIGHT: User Video & Controls */}
+            <div className="flex-1 bg-black rounded-2xl overflow-hidden relative border border-gray-800 flex flex-col shadow-2xl min-h-0">
+                <div className="relative flex-1 bg-gray-900 min-h-0">
+                    <video ref={videoRef} autoPlay muted playsInline className={`w-full h-full object-cover ${!isScreenSharing ? 'transform scale-x-[-1]' : ''}`} />
+
+                    {/* Captions Overlay */}
+                    {showCaptions && transcript && (
+                        <div className="absolute bottom-32 left-1/2 transform -translate-x-1/2 w-4/5 text-center px-4">
+                            <span className="bg-black/80 text-blue-300 px-3 py-1 rounded-t-lg text-[10px] font-bold uppercase tracking-widest border-t border-x border-white/10">Scanning Audio</span>
+                            <div className="bg-black/80 px-4 py-3 rounded-xl rounded-t-none backdrop-blur-md border border-white/10 text-lg font-medium text-white shadow-xl">
+                                {transcript}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* BOTTOM CONTROLS BAR */}
+                <div className="h-24 bg-gray-900 border-t border-gray-800 flex items-center justify-center gap-4 px-6 flex-shrink-0 z-50">
+
+                    {/* Mic Toggle */}
+                    <button
+                        onClick={() => setIsMuted(!isMuted)}
+                        className={`p-4 rounded-full transition-all hover:scale-110 ${isMuted ? 'bg-red-500 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                        title={isMuted ? "Unmute" : "Mute"}
+                    >
+                        {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
+                    </button>
+
+                    {/* Video Toggle */}
+                    <button
+                        onClick={() => setIsVideoEnabled(!isVideoEnabled)}
+                        className={`p-4 rounded-full transition-all hover:scale-110 ${!isVideoEnabled ? 'bg-red-500 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                        title={!isVideoEnabled ? "Turn On Camera" : "Turn Off Camera"}
+                    >
+                        {!isVideoEnabled ? <VideoOff size={22} /> : <Video size={22} />}
+                    </button>
+
+                    <div className="w-px h-8 bg-gray-700 mx-2 hidden sm:block"></div>
+
+                    {/* Code Editor Toggle */}
+                    <button
+                        onClick={() => setShowCodeEditor(!showCodeEditor)}
+                        className={`p-4 rounded-full transition-all hover:scale-110 ${showCodeEditor ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/40' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                        title="Toggle Code Editor"
+                    >
+                        <Code size={22} />
+                    </button>
+
+                    {/* Screen Share Toggle */}
+                    <button
+                        onClick={() => setIsScreenSharing(!isScreenSharing)}
+                        className={`p-4 rounded-full transition-all hover:scale-110 ${isScreenSharing ? 'bg-green-600 text-white shadow-lg shadow-green-500/40' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                        title="Share Screen"
+                    >
+                        <Monitor size={22} />
+                    </button>
+
+                    {/* Captions Toggle */}
+                    <button
+                        onClick={() => setShowCaptions(!showCaptions)}
+                        className={`p-4 rounded-full transition-all hover:scale-110 ${showCaptions ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                        title="Captions"
+                    >
+                        <Captions size={22} />
+                    </button>
+
+                    <div className="flex-1"></div>
+
+                    {/* End Call */}
+                    <button
+                        onClick={async () => {
+                            // Call finalize API
+                            if (token && id) {
+                                try {
+                                    const formData = new FormData();
+                                    formData.append('duration_seconds', (600 - remainingTime).toString());
+
+                                    await fetch(`http://localhost:8000/interview/${id}/finalize`, {
+                                        method: 'POST',
+                                        headers: { 'Authorization': `Bearer ${token}` },
+                                        body: formData
+                                    });
+                                } catch (e) {
+                                    console.error("Failed to save duration", e);
+                                }
+                            }
+                            // navigate('/code-test/' + id);
+                            navigate('/feedback/' + id);
+                        }}
+                        className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:shadow-red-600/30 transition flex items-center gap-2"
+                    >
+                        <PhoneOff size={20} /> <span className="hidden sm:inline">End Interview</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};

@@ -1,0 +1,133 @@
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../store/useAuthStore';
+import { CheckCircle, AlertTriangle, BookOpen, ChevronLeft } from 'lucide-react';
+
+export const FeedbackReport = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const token = useAuthStore(state => state.token);
+
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+        const fetchFeedback = async () => {
+            try {
+                const res = await fetch(`http://localhost:8000/interview/${id}/feedback`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error("Failed to generate feedback");
+                const json = await res.json();
+                setData(json);
+            } catch (err) {
+                console.error(err);
+                setError("Could not generate feedback. Did you complete the interview?");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (token && id) fetchFeedback();
+    }, [id, token]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+                <h2 className="text-2xl font-bold mb-2">Generating Comprehensive Report...</h2>
+                <p className="text-gray-400">Our AI is analyzing your answers, tone, and technical accuracy.</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-8 text-center">
+                <div className="bg-red-500/10 p-4 rounded-full mb-4 text-red-500"><AlertTriangle size={40} /></div>
+                <h2 className="text-2xl font-bold mb-2">Report Generation Failed</h2>
+                <p className="text-gray-400 mb-6">{error}</p>
+                <button onClick={() => navigate('/dashboard')} className="text-blue-400 hover:underline">Return to Dashboard</button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-gray-950 text-white p-8">
+            <div className="max-w-4xl mx-auto">
+                <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 transition">
+                    <ChevronLeft size={20} /> Back to Dashboard
+                </button>
+
+                {/* Header Card */}
+                <div className="bg-gray-900 rounded-3xl p-8 border border-gray-800 shadow-2xl mb-8 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+
+                    <div className="flex flex-col md:flex-row gap-8 items-center relative z-10">
+                        <div className="text-center">
+                            <div className={`w-32 h-32 rounded-full flex items-center justify-center border-8 text-5xl font-bold shadow-lg ${data?.score >= 70 ? 'border-green-500 text-green-400 shadow-green-900/20' : 'border-yellow-500 text-yellow-400 shadow-yellow-900/20'}`}>
+                                {data?.score}
+                            </div>
+                            <p className="mt-2 text-gray-400 font-bold tracking-widest text-xs uppercase">Overall Score</p>
+                        </div>
+                        <div className="flex-1">
+                            <h1 className="text-3xl font-bold mb-2">Interview Performance Report</h1>
+                            <p className="text-gray-300 text-lg leading-relaxed">{data?.summary}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Grid Layout */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                    {/* Strengths */}
+                    <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+                        <h3 className="text-xl font-bold text-green-400 mb-4 flex items-center gap-2">
+                            <CheckCircle size={24} /> Key Strengths
+                        </h3>
+                        <ul className="space-y-3">
+                            {data?.strengths.map((s, i) => (
+                                <li key={i} className="flex gap-3 text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+                                    <span className="text-green-500 font-bold">•</span>
+                                    {s}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+
+                    {/* Weaknesses */}
+                    <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+                        <h3 className="text-xl font-bold text-red-400 mb-4 flex items-center gap-2">
+                            <AlertTriangle size={24} /> Areas for Improvement
+                        </h3>
+                        <ul className="space-y-3">
+                            {data?.weaknesses.map((s, i) => (
+                                <li key={i} className="flex gap-3 text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+                                    <span className="text-red-500 font-bold">•</span>
+                                    {s}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+
+                    {/* Study Plan */}
+                    <div className="bg-blue-900/10 p-6 rounded-2xl border border-blue-900/30 col-span-1 md:col-span-2">
+                        <h3 className="text-xl font-bold text-blue-400 mb-4 flex items-center gap-2">
+                            <BookOpen size={24} /> Recommended Study Plan
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {data?.suggestions.map((s, i) => (
+                                <div key={i} className="bg-gray-900 p-4 rounded-xl border border-gray-800 hover:border-blue-500 transition">
+                                    <p className="text-gray-300 font-medium">{s}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    );
+};
