@@ -65,8 +65,58 @@ export const ResumeOptimizer = () => {
         }
     };
 
+    const parseMarkdown = (text) => {
+        if (!text) return [];
+        const sections = text.split('###').filter(s => s.trim());
+        return sections.map(s => {
+            const [title, ...content] = s.split('\n');
+            return { title: title.trim(), content: content.join('\n').trim() };
+        });
+    };
+
+    const renderFormattedSection = (section) => {
+        if (section.title.includes("Bullet Point Critique")) {
+            const weakMatch = section.content.match(/\*\*Weak:\*\*(.*?)\n/s);
+            const betterMatch = section.content.match(/\*\*Better:\*\*(.*)/s);
+            const weak = weakMatch ? weakMatch[1].trim() : "";
+            const better = betterMatch ? betterMatch[1].trim() : section.content;
+
+            return (
+                <div key={section.title} className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700 mt-4">
+                    <h4 className="text-blue-400 font-bold mb-3 flex items-center gap-2">
+                        <AlertTriangle size={16} /> {section.title}
+                    </h4>
+                    <div className="space-y-3">
+                        <div className="bg-red-900/10 border border-red-900/30 p-3 rounded-lg">
+                            <span className="text-red-400 text-xs font-bold uppercase block mb-1">Original (Weak)</span>
+                            <p className="text-sm text-zinc-300">{weak}</p>
+                        </div>
+                        <div className="flex justify-center">
+                            <span className="text-zinc-500 text-xs">⬇️ Transformed to Impact-Driven ⬇️</span>
+                        </div>
+                        <div className="bg-green-900/10 border border-green-900/30 p-3 rounded-lg">
+                            <span className="text-green-400 text-xs font-bold uppercase block mb-1">Optimized (Strong)</span>
+                            <p className="text-sm text-zinc-300">{better}</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div key={section.title} className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700 mt-4">
+                <h4 className="text-blue-400 font-bold mb-2">{section.title}</h4>
+                <div className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed font-sans">
+                    {section.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').split('\n').map((line, i) => (
+                        <p key={i} className="mb-1" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<span class="text-white font-bold">$1</span>') }} />
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
     return (
-        <div className="max-w-7xl mx-auto space-y-8 animate-fade-in flex gap-6">
+        <div className="max-w-7xl mx-auto space-y-8 animate-fade-in flex flex-col xl:flex-row gap-6">
             {/* Main Content */}
             <div className="flex-1 space-y-8">
                 <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-3xl relative overflow-hidden">
@@ -76,14 +126,14 @@ export const ResumeOptimizer = () => {
                         <FileText className="text-blue-400" /> Resume ATS Optimizer
                     </h2>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                         <div className="space-y-6">
                             <div>
                                 <label className="block text-zinc-400 text-xs font-bold uppercase tracking-wider mb-2">Target Job Description</label>
                                 <textarea
                                     value={jobDesc}
                                     onChange={(e) => setJobDesc(e.target.value)}
-                                    className="w-full h-40 bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 text-sm focus:outline-none focus:border-blue-500 transition resize-none"
+                                    className="w-full h-40 bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 text-sm focus:outline-none focus:border-blue-500 transition resize-none custom-scrollbar"
                                     placeholder="Paste the Job Description here..."
                                 />
                             </div>
@@ -112,7 +162,7 @@ export const ResumeOptimizer = () => {
                         </div>
 
                         {/* Results Section */}
-                        <div className="bg-black/40 rounded-2xl border border-zinc-800 p-6 relative min-h-[400px]">
+                        <div className="bg-black/40 rounded-2xl border border-zinc-800 p-6 relative min-h-[500px] max-h-[800px] overflow-y-auto custom-scrollbar">
                             {!result ? (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-600 text-center p-8">
                                     <div className="p-4 bg-zinc-900 rounded-full mb-4">
@@ -121,7 +171,8 @@ export const ResumeOptimizer = () => {
                                     <p>Upload your resume and a JD to see how well you match.</p>
                                 </div>
                             ) : (
-                                <div className="space-y-6 animate-fade-in-up">
+                                <div className="space-y-6 animate-fade-in-up pb-10">
+                                    {/* Header Score */}
                                     <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
                                         <div>
                                             <div className="text-zinc-400 text-xs font-bold uppercase">ATS Match Score</div>
@@ -138,26 +189,28 @@ export const ResumeOptimizer = () => {
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <h3 className="text-red-400 text-sm font-bold uppercase tracking-wider flex items-center gap-2 mb-3">
-                                            <AlertTriangle size={16} /> Missing Keywords
-                                        </h3>
-                                        <div className="flex flex-wrap gap-2">
-                                            {result.missing_keywords?.map((kw, i) => (
-                                                <span key={i} className="px-3 py-1 bg-red-900/20 text-red-200 border border-red-900/30 rounded-full text-xs">
-                                                    {kw}
-                                                </span>
-                                            ))}
+                                    {/* Missing Keywords */}
+                                    {result.missing_keywords && result.missing_keywords.length > 0 && (
+                                        <div>
+                                            <h3 className="text-red-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2 mb-3">
+                                                <AlertTriangle size={14} /> Missing Keywords
+                                            </h3>
+                                            <div className="flex flex-wrap gap-2">
+                                                {result.missing_keywords.map((kw, i) => (
+                                                    <span key={i} className="px-3 py-1 bg-red-900/20 text-red-200 border border-red-900/30 rounded-full text-xs">
+                                                        {kw}
+                                                    </span>
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
 
-                                    <div>
-                                        <h3 className="text-blue-400 text-sm font-bold uppercase tracking-wider flex items-center gap-2 mb-3">
-                                            <CheckCircle size={16} /> Optimized Content Suggestion
+                                    {/* Parsed Sections */}
+                                    <div className="space-y-2">
+                                        <h3 className="text-blue-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2 mt-6">
+                                            <CheckCircle size={14} /> Optimization Report
                                         </h3>
-                                        <div className="bg-zinc-900 p-4 rounded-lg text-xs leading-relaxed text-zinc-300 font-mono overflow-y-auto max-h-[300px] border border-zinc-700 custom-scrollbar whitespace-pre-wrap">
-                                            {result.optimized_content}
-                                        </div>
+                                        {parseMarkdown(result.optimized_content).map((section) => renderFormattedSection(section))}
                                     </div>
                                 </div>
                             )}
@@ -167,11 +220,11 @@ export const ResumeOptimizer = () => {
             </div>
 
             {/* History Sidebar */}
-            <div className="w-80 bg-zinc-900/30 border border-zinc-800 rounded-3xl p-6 hidden xl:block h-fit">
+            <div className="w-full xl:w-80 bg-zinc-900/30 border border-zinc-800 rounded-3xl p-6 h-fit">
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                     <RefreshCw size={18} className="text-zinc-500" /> Recent Scans
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar">
                     {history.length === 0 ? (
                         <p className="text-zinc-600 text-sm text-center py-4">No scan history yet.</p>
                     ) : (
