@@ -1,6 +1,20 @@
 version: '3.8'
 
 services:
+  frontend:
+    build: ./frontend
+    container_name: interview-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    # Polling is often needed for hot reloading in Docker, especially on non-Linux filesystems or specific setups
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    stdin_open: true
+    tty: true
+
   backend:
     build: ./backend
     container_name: interview-backend
