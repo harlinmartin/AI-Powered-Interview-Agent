@@ -19,10 +19,12 @@ async def upload_interview_files(
             raise HTTPException(status_code=400, detail="Only PDF, PNG, JPG files allowed")
         
         # Create Interview ID first
+        import datetime
         new_interview = models.Interview(
             user_id=current_user.id,
             job_description=job_description,
-            status="PROCESSING"
+            status="PROCESSING",
+            created_at=datetime.datetime.now().isoformat()
         )
         db.add(new_interview)
         db.commit()
@@ -53,10 +55,14 @@ async def upload_interview_files(
         return {"interview_id": new_interview.id, "status": "Ready"}
     except Exception as e:
         import traceback
-        error_msg = traceback.format_exc()
-        print(f"UPLOAD ERROR: {error_msg}")
-        with open("upload_error.log", "w") as f:
-            f.write(error_msg)
+        import datetime
+        error_msg = f"\n[{datetime.datetime.now()}] UPLOAD ERROR:\n{traceback.format_exc()}\n"
+        print(error_msg)
+        try:
+            with open("backend_debug_error.log", "a") as f:
+                f.write(error_msg)
+        except:
+            pass
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @router.post("/{interview_id}/finalize")
@@ -181,12 +187,24 @@ async def optimize_resume(
         result_json = json.loads(optimization_result)
 
         # PERSIST RESULT
+        # PERSIST RESULT
         try:
             import datetime
+            
+            # Robust Parsing
+            raw_score = result_json.get("ats_score", 0)
+            try:
+                # Handle "85", "85/100", "High (85)"
+                import re
+                score_match = re.search(r'\d+', str(raw_score))
+                final_score = int(score_match.group()) if score_match else 0
+            except:
+                final_score = 0
+                
             new_opt = models.ResumeOptimization(
                 user_id=current_user.id,
                 job_description=job_description,
-                ats_score=result_json.get("ats_score", 0),
+                ats_score=final_score,
                 missing_keywords=json.dumps(result_json.get("missing_keywords", [])),
                 suggestions=result_json.get("optimized_content", ""),
                 created_at=datetime.datetime.now().isoformat()
@@ -194,14 +212,29 @@ async def optimize_resume(
             db.add(new_opt)
             db.commit()
         except Exception as db_err:
-            print(f"DB Error saving optimization: {db_err}")
+            import traceback
+            import datetime
+            error_msg = f"\n[{datetime.datetime.now()}] DB SAVE ERROR:\n{str(db_err)}\nData: {str(result_json)}\n"
+            print(error_msg)
+            try:
+                with open("backend_debug_error.log", "a") as f:
+                    f.write(error_msg)
+            except:
+                pass
 
         return result_json
 
     except Exception as e:
-        print(f"Optimization Error: {e}")
         import traceback
-        traceback.print_exc()
+        import datetime
+        error_msg = f"\n[{datetime.datetime.now()}] OPTIMIZE ERROR:\n{traceback.format_exc()}\n"
+        print(error_msg)
+        try:
+            with open("backend_debug_error.log", "a") as f:
+                f.write(error_msg)
+        except:
+            pass
+        print(f"Optimization Error: {e}")
         raise HTTPException(status_code=500, detail="Resume optimization failed")
 
 @router.get("/resume/history")

@@ -8,7 +8,17 @@ from app.routers import auth, interview
 
 models.Base.metadata.create_all(bind=database.engine)
 
-app = FastAPI(title="Interview Agent Backend")
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    yield
+    # Shutdown
+    from app.services.rag_service import close_client
+    close_client()
+
+app = FastAPI(title="Interview Agent Backend", lifespan=lifespan)
 
 # Setup CORS
 app.add_middleware(

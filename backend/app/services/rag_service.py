@@ -12,6 +12,9 @@ COLLECTION_NAME = "resume_chunks"
 
 embedding_model = TextEmbedding()
 
+def close_client():
+    client.close()
+
 def init_db():
     collections = client.get_collections()
     if COLLECTION_NAME not in [c.name for c in collections.collections]:

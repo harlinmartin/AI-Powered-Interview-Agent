@@ -66,12 +66,22 @@ class LLMService:
         
         Candidate Context (Resume Matches): {context}
         
-        Your Goal: Conduct a professional technical interview.
-        1. LEVEL: Ask **BASIC to MEDIUM** difficulty questions. Do NOT ask advanced or expert-level questions.
-        2. SOURCE: Strictly based on the Candidate's Resume. If the resume is empty, ask generic basic software questions.
-        3. ACKNOWLEDGE: Very briefly acknowledge the answer (e.g. "Okay", "I see") before asking the next question.
-        4. CONCISENESS: Keep your response relatively short (max 2-3 sentences). Ask ONE clear question at a time.
-        5. TONE: Friendly, patient, and encouraging.
+        Your Goal: Conduct a professional technical interview with ADAPTIVE DIFFICULTY.
+        
+        **ADAPTIVE STRATEGY (Must Follow):**
+        1. **START**: Begin with fundamental, conceptual questions based on the resume.
+        2. **IF ANSWER IS GOOD**:
+           - **LEVEL UP**: Switch to **SCENARIO-BASED** or **SYSTEM DESIGN** questions.
+           - Ask "How would you handle X situation?" or "Design a system for Y".
+        3. **IF ANSWER IS WEAK/INCORRECT**:
+           - **LEVEL DOWN**: Switch to **PROBING BASICS**.
+           - Ask simpler clarifying questions to help them recover (e.g. "Can you explain the basic definition of X?").
+           
+        **Guidelines:**
+        - SOURCE: Strictly based on the Candidate's Resume.
+        - ACKNOWLEDGE: Very briefly acknowledge the answer (e.g. "Okay", "Interesting") before asking the next question.
+        - CONCISENESS: Keep your response relatively short (max 2-3 sentences). Ask ONE clear question at a time.
+        - TONE: Professional yet encouraging. Match the difficulty to the candidate's performance dynamically.
         """
 
         messages = [{"role": "system", "content": system_prompt}]
@@ -148,17 +158,20 @@ class LLMService:
         {resume_text}
 
         Your Task:
-        1. Calculate an ATS Score (0-100) based on keyword matching and relevance.
-        2. Identify MISSING keywords from the JD that are critical.
-        3. Identify formatting issues (e.g. headers, columns - assume text input context).
-        4. REWRITE the "Summary" and "Skills" sections to be perfectly optimized for this JD.
+        1. **ANALYZE THE ROLE**: Identify if this is Backend, Frontend, Full Stack, ML, etc.
+        2. **CALCULATE ATS SCORE**: (0-100) based on keyword matching.
+        3. **IDENTIFY GAPS**: Missing critical keywords.
+        4. **ROLE-SPECIFIC ADVICE**:
+           - **Projects to Highlight**: Suggest 1-2 specific projects the candidate should describe to match this specific role (e.g. "For Backend, highlight your API scaling project").
+           - **Weak Bullets**: Quote 1 specific weak bullet point from the resume and rewrite it to be impact-driven (X-Y-Z formula).
+        5. **REWRITE**: improved "Summary" and "Skills".
 
         Output ONLY valid JSON:
         {{
             "ats_score": <int>,
             "missing_keywords": ["list", "of", "keywords"],
             "formatting_issues": ["list", "of", "issues"],
-            "optimized_content": "Markdown formatted string with Improved Summary and Skills sections."
+            "optimized_content": "Markdown string containing:\n\n### Role Analysis\n(Type of role detected)\n\n### Project Recommendations\n(Specific advice on what to highlight)\n\n### Bullet Point Critique\n**Weak:** (Quote)\n**Better:** (Rewrite)\n\n### Optimized Summary\n(Text)\n\n### Optimized Skills\n(Text)"
         }}
         """
         
