@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import 'regenerator-runtime/runtime';
+import 'regenerator-runtime/runtime'; // Polyfill for SpeechRecognition
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import { useTTS } from '../hooks/useTTS';
 import { useAuthStore } from '../store/useAuthStore';
@@ -13,7 +13,10 @@ export const InterviewRoom = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const videoRef = useRef(null);
-    const [ws, setWs] = useState(null);
+    const wsRef = useRef(null); // Changed to Ref
+
+    const [wsStatus, setWsStatus] = useState("Disconnected"); // Added WS Status
+    const [mediaError, setMediaError] = useState(null); // Added Media Error
 
     // UX State
     const [started, setStarted] = useState(false);
@@ -23,7 +26,7 @@ export const InterviewRoom = () => {
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [showCodeEditor, setShowCodeEditor] = useState(false);
     const [code, setCode] = useState("// Type your code here if asked...");
-    const [language, setLanguage] = useState("javascript"); // Added language state
+    const [language, setLanguage] = useState("javascript");
 
     // Voice Hooks
     const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition();
@@ -31,8 +34,9 @@ export const InterviewRoom = () => {
     const [aiResponse, setAiResponse] = useState("Connected. Waiting for you to start...");
 
     // Timers
-    const [remainingTime, setRemainingTime] = useState(600); // 10 minutes countdown
+    const [remainingTime, setRemainingTime] = useState(600);
     const [thinkTime, setThinkTime] = useState(0);
+    const [aiThinking, setAiThinking] = useState(false); // Added missing state
 
     const token = useAuthStore(state => state.token);
 
@@ -64,17 +68,15 @@ export const InterviewRoom = () => {
         if (!started) return;
 
         const startMedia = async () => {
+            setMediaError(null);
             try {
                 let stream;
                 if (isScreenSharing) {
-                    // Screen Share
                     stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-                    // Handle user stopping screen share via browser UI
                     stream.getVideoTracks()[0].onended = () => {
                         setIsScreenSharing(false);
                     };
                 } else {
-                    // Camera
                     stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                 }
 
@@ -83,7 +85,7 @@ export const InterviewRoom = () => {
                 }
             } catch (err) {
                 console.error("Media Error:", err);
-                // If screen share fails (e.g. cancelled), fallback to camera
+                setMediaError("Could not access Camera/Microphone. Please allow permissions.");
                 if (isScreenSharing) setIsScreenSharing(false);
             }
         };
@@ -95,7 +97,6 @@ export const InterviewRoom = () => {
     useEffect(() => {
         if (videoRef.current && videoRef.current.srcObject) {
             const stream = videoRef.current.srcObject;
-            // Only affect video tracks if we are NOT screen sharing (don't black out screen share)
             if (!isScreenSharing) {
                 stream.getVideoTracks().forEach(track => track.enabled = isVideoEnabled);
             }
@@ -106,25 +107,43 @@ export const InterviewRoom = () => {
     useEffect(() => {
         if (!token || !id || !started) return;
 
+        console.log("Attempting WebSocket Connection...");
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setWsStatus("Connecting...");
         const socket = new WebSocket(`ws://localhost:8000/interview/ws/${id}?token=${token}`);
 
-        socket.onopen = () => console.log("WS Connected");
+        socket.onopen = () => {
+            console.log("WS Connected");
+            setWsStatus("Connected");
+        };
+
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === 'ai_response') {
                 setAiResponse(data.content);
                 speak(data.content);
                 setThinkTime(10);
+            }
 
-                if (data.content.includes("thank you") || data.content.includes("Goodbye")) {
-                    // Optional auto-redirect logic
-                    // setTimeout(() => navigate(`/code-test/${id}`), 6000);
-                }
+            if (data.type === 'coding_assessment') {
+                console.log("Starting Coding Assessment");
+                setShowCodeEditor(true);
+                setCode(data.questions); // Pre-fill questions
+                // Optional: Force a specific layout or maximize editor
             }
         };
 
-        socket.onclose = () => console.log("WS Disconnected");
-        setWs(socket);
+        socket.onclose = () => {
+            console.log("WS Disconnected");
+            setWsStatus("Disconnected");
+        };
+
+        socket.onerror = (err) => {
+            console.error("WS Error:", err);
+            setWsStatus("Error");
+        };
+
+        wsRef.current = socket;
         return () => socket.close();
     }, [id, token, speak, navigate, started]);
 
@@ -145,17 +164,19 @@ export const InterviewRoom = () => {
 
     // 8. Transcript Sender
     useEffect(() => {
-        if (transcript) setThinkTime(0);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        if (transcript) setThinkTime(prev => prev === 0 ? prev : 0);
 
         const handler = setTimeout(() => {
-            if (transcript && ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'user_audio_text', content: transcript }));
+            if (transcript && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                setAiThinking(true); // START THINKING
+                wsRef.current.send(JSON.stringify({ type: 'user_audio_text', content: transcript }));
                 resetTranscript();
             }
         }, 3000); // Increased debounce to 3s for better accuracy
 
         return () => clearTimeout(handler);
-    }, [transcript, ws, resetTranscript]);
+    }, [transcript, resetTranscript]);
 
 
     // ================= RENDER =================
@@ -202,19 +223,34 @@ export const InterviewRoom = () => {
             <div className={`${showCodeEditor ? 'w-1/4' : 'w-1/3'} flex flex-col gap-4 transition-all duration-300 hidden md:flex`}>
                 <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800 flex-1 flex flex-col justify-center items-center relative shadow-inner">
                     {/* Think Buffer */}
-                    {thinkTime > 0 && !aiSpeaking && (
-                        <div className="absolute top-4 left-4 right-4 bg-blue-950/50 rounded-lg p-2 text-center border border-blue-900/50">
-                            <span className="text-xs font-bold text-blue-300">Think Time: {thinkTime}s</span>
-                            <div className="h-1 bg-blue-500 rounded-full w-full mt-1"></div>
+                    {aiThinking && (
+                        <div className="absolute top-4 left-4 right-4 bg-blue-950/50 rounded-lg p-2 text-center border border-blue-900/50 animate-pulse">
+                            <span className="text-xs font-bold text-blue-300">AI is thinking...</span>
                         </div>
                     )}
 
-                    <div className={`rounded-full flex items-center justify-center transition-all duration-500 ${aiSpeaking ? 'bg-blue-600 scale-105 shadow-[0_0_50px_blue]' : 'bg-gray-800'} ${showCodeEditor ? 'w-32 h-32 text-4xl' : 'w-56 h-56 text-7xl'}`}>
-                        {aiSpeaking ? '🔊' : '🤖'}
+                    <div className={`rounded-full flex items-center justify-center transition-all duration-500 ${aiSpeaking ? 'bg-blue-600 scale-105 shadow-[0_0_50px_blue]' : aiThinking ? 'bg-purple-600 animate-bounce' : 'bg-gray-800'} ${showCodeEditor ? 'w-32 h-32 text-4xl' : 'w-56 h-56 text-7xl'}`}>
+                        {aiSpeaking ? '🔊' : aiThinking ? '💭' : '🤖'}
                     </div>
 
                     <div className="text-center w-full mt-6">
                         <h3 className="text-xl font-bold text-white">AI Interviewer</h3>
+
+                        {/* LISTENING INDICATOR */}
+                        <div className="flex justify-center items-center gap-2 mt-2 h-6">
+                            {listening ? (
+                                <>
+                                    <span className="relative flex h-3 w-3">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                    </span>
+                                    <span className="text-xs text-red-400 font-mono animate-pulse">LISTENING...</span>
+                                </>
+                            ) : (
+                                <span className="text-xs text-gray-500 font-mono">Mic Inactive</span>
+                            )}
+                        </div>
+
                         <div className="min-h-[4rem] flex flex-col items-center justify-center">
                             {showCaptions && (
                                 <p className="text-gray-300 text-sm italic px-2 mt-2 h-20 overflow-y-auto custom-scrollbar">"{aiResponse}"</p>
@@ -269,6 +305,27 @@ export const InterviewRoom = () => {
             <div className="flex-1 bg-black rounded-2xl overflow-hidden relative border border-gray-800 flex flex-col shadow-2xl min-h-0">
                 <div className="relative flex-1 bg-gray-900 min-h-0">
                     <video ref={videoRef} autoPlay muted playsInline className={`w-full h-full object-cover ${!isScreenSharing ? 'transform scale-x-[-1]' : ''}`} />
+
+                    {/* Media Error Overlay */}
+                    {mediaError && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-gray-900/90 z-20 p-6 text-center">
+                            <div>
+                                <div className="text-red-500 text-5xl mb-4">📷</div>
+                                <h3 className="text-xl font-bold text-white mb-2">Camera Access Denied</h3>
+                                <p className="text-gray-400">{mediaError}</p>
+                                <button onClick={() => window.location.reload()} className="mt-4 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-white">Retry</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* WS Status Overlay (Debug) */}
+                    <div className="absolute top-4 right-4 z-20">
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${wsStatus === 'Connected' ? 'bg-green-500/20 text-green-400' :
+                            wsStatus === 'Connecting...' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'
+                            }`}>
+                            {wsStatus}
+                        </span>
+                    </div>
 
                     {/* Captions Overlay */}
                     {showCaptions && transcript && (
@@ -341,6 +398,10 @@ export const InterviewRoom = () => {
                                 try {
                                     const formData = new FormData();
                                     formData.append('duration_seconds', (600 - remainingTime).toString());
+                                    // Send Code
+                                    if (showCodeEditor) {
+                                        formData.append('code_content', code);
+                                    }
 
                                     await fetch(`http://localhost:8000/interview/${id}/finalize`, {
                                         method: 'POST',
