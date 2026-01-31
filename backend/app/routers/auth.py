@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -80,3 +81,47 @@ def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: Sessio
         data={"sub": user.email}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+class GoogleLoginData(BaseModel):
+    email: str
+    name: str
+
+@router.post("/google-login", response_model=schemas.Token)
+def google_login(data: GoogleLoginData, db: Session = Depends(get_db)):
+    # Mock Google Login: Check if user exists, else create
+    user = db.query(models.User).filter(models.User.email == data.email).first()
+    if not user:
+        # Create new user without password (or dummy)
+        hashed_password = get_password_hash("google_auth_dummy_password")
+        new_user = models.User(email=data.email, full_name=data.name, hashed_password=hashed_password)
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        user = new_user
+    else:
+        # Update name if changed
+        if user.full_name != data.name:
+            user.full_name = data.name
+            db.commit()
+            
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+class PasswordReset(BaseModel):
+    email: str
+    new_password: str
+
+@router.post("/forgot-password")
+def forgot_password(reset_data: PasswordReset, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == reset_data.email).first()
+    if not user:
+        # For security, standard practice is not to reveal if user exists, but for MVP we return 404 or success
+        raise HTTPException(status_code=404, detail="Email not found")
+    
+    hashed_password = get_password_hash(reset_data.new_password)
+    user.hashed_password = hashed_password
+    db.commit()
+    return {"message": "Password updated successfully"}

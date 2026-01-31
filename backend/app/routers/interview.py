@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from .. import models, database
 from ..services import rag_service
@@ -7,22 +7,65 @@ import json
 
 router = APIRouter(prefix="/interview", tags=["Interview"])
 
+def process_resume_background(interview_id: int, file_content: bytes, filename: str):
+    """
+    Background task to process resume (Extract text + Embedding).
+    Manages its own DB session.
+    """
+    db = database.SessionLocal()
+    try:
+        print(f"INFO: [Background] Processing resume for Interview {interview_id}")
+        
+        # Check if Image
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            print("INFO: [Background] Processing Resume Image with Vision LLM...")
+            mime_type = "image/jpeg" if filename.lower().endswith(('.jpg','.jpeg')) else "image/png"
+            # Import locally to avoid circulars if any
+            from ..services.llm_service import llm_service
+            resume_text = llm_service.extract_text_from_image(file_content, mime_type)
+            if not resume_text:
+                resume_text = "FAILED TO EXTRACT TEXT FROM IMAGE."
+        else:
+            # Standard PDF
+            print("INFO: [Background] Processing PDF Resume...")
+            resume_text = rag_service.ingest_resume(file_content, interview_id)
+            
+        # Update DB
+        interview = db.query(models.Interview).filter(models.Interview.id == interview_id).first()
+        if interview:
+            interview.resume_text = resume_text
+            interview.status = "READY"
+            db.commit()
+            print(f"INFO: [Background] Interview {interview_id} ready.")
+    except Exception as e:
+        print(f"ERROR: [Background] Resume processing failed: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        db.close()
+
 @router.post("/upload")
 async def upload_interview_files(
+    background_tasks: BackgroundTasks,
     resume: UploadFile = File(...),
     job_description: str = Form(...),
+    round_type: str = Form("Technical"),
+    difficulty: str = Form("Medium"),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
 ):
     try:
+        print(f"INFO: POST /upload hit. File: {resume.filename}")
         if not (resume.filename.endswith(".pdf") or resume.filename.lower().endswith(('.png', '.jpg', '.jpeg'))):
             raise HTTPException(status_code=400, detail="Only PDF, PNG, JPG files allowed")
         
-        # Create Interview ID first
+        # Create Interview ID immediately
         import datetime
         new_interview = models.Interview(
             user_id=current_user.id,
             job_description=job_description,
+            round_type=round_type,
+            difficulty=difficulty,
             status="PROCESSING",
             created_at=datetime.datetime.now().isoformat()
         )
@@ -30,45 +73,28 @@ async def upload_interview_files(
         db.commit()
         db.refresh(new_interview)
         
-        # Process Resume
+        # Read file content to memory
         content = await resume.read()
         
-        # Check if Image
-        if resume.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-            print("INFO: Processing Resume Image with Vision LLM...")
-            mime_type = "image/jpeg" if resume.filename.lower().endswith(('.jpg','.jpeg')) else "image/png"
-            import app.services.llm_service as llm_lib # delayed import to avoid circular
-            # Actually use the instance from the module
-            from ..services.llm_service import llm_service
-            resume_text = llm_service.extract_text_from_image(content, mime_type)
-            if not resume_text:
-                resume_text = "FAILED TO EXTRACT TEXT FROM IMAGE."
-        else:
-            # Standard PDF
-            resume_text = rag_service.ingest_resume(content, new_interview.id)
+        # Offload all processing to background task
+        background_tasks.add_task(process_resume_background, new_interview.id, content, resume.filename)
         
-        # Update Interview with text
-        new_interview.resume_text = resume_text
-        new_interview.status = "READY"
-        db.commit()
+        # Return immediately
+        print("INFO: Returning ID immediately.")
+        return {"interview_id": new_interview.id, "status": "Processing"}
         
-        return {"interview_id": new_interview.id, "status": "Ready"}
     except Exception as e:
         import traceback
         import datetime
         error_msg = f"\n[{datetime.datetime.now()}] UPLOAD ERROR:\n{traceback.format_exc()}\n"
         print(error_msg)
-        try:
-            with open("backend_debug_error.log", "a") as f:
-                f.write(error_msg)
-        except:
-            pass
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @router.post("/{interview_id}/finalize")
 def finalize_interview(
     interview_id: int,
     duration_seconds: int = Form(...),
+    code_content: str = Form(None),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -78,6 +104,13 @@ def finalize_interview(
     
     interview.status = "COMPLETED"
     interview.duration_seconds = duration_seconds
+    
+    # Save Code Submission if present
+    if code_content:
+        # Save as a final system message or specific field if schema supports (using Message for now)
+        code_msg = models.Message(interview_id=interview_id, role="system", content=f"CODE SUBMISSION:\n{code_content}")
+        db.add(code_msg)
+        
     db.commit()
     return {"status": "Updated", "duration": duration_seconds}
 
@@ -280,8 +313,21 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
         history = db.query(models.Message).filter(models.Message.interview_id == interview_id).all()
         
         if not history:
-            # Generate initial question
+            # Personalize Greeting
             initial_msg = "Hello! I've reviewed your resume. Are you ready to start?"
+            try:
+                # Decode token to get user name (Naive / simple for WS)
+                from .auth import SECRET_KEY, ALGORITHM
+                from jose import jwt
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                email = payload.get("sub")
+                user = db.query(models.User).filter(models.User.email == email).first()
+                if user and user.full_name:
+                    first_name = user.full_name.split()[0]
+                    initial_msg = f"Hi {first_name}, let's start the interview."
+            except Exception as e:
+                print(f"WS Greeting Error: {e}")
+
             # Save AI message
             db_msg = models.Message(interview_id=interview_id, role="assistant", content=initial_msg)
             db.add(db_msg)
@@ -306,23 +352,57 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
                 history = db.query(models.Message).filter(models.Message.interview_id == interview_id).all()
                 
                 # CHECK FOR INTERVIEW END
-                if len(history) >= 30: # ~15 interactions
-                    closing_msg = "Thank you for the interview. We have gathered enough information. Please proceed to the coding assessment. Goodbye!"
+                # Trigger Coding Round
+                should_trigger_coding = False
+                # Robust check for round type
+                current_round = interview.round_type.strip() if interview.round_type else "Technical"
+                
+                print(f"DEBUG: Coding Trigger Check. Type: '{current_round}', History: {len(history)}")
+
+                if current_round == "Coding" and len(history) >= 2:
+                    should_trigger_coding = True
+                elif current_round == "Technical" and len(history) >= 20:
+                    should_trigger_coding = True
+                
+                if should_trigger_coding:
                     
-                    # Save Closing Message
-                    final_msg_db = models.Message(interview_id=interview_id, role="assistant", content=closing_msg)
-                    db.add(final_msg_db)
+                    # 1. Generate Coding Questions
+                    print("Generating Coding Questions...")
+                    coding_questions = llm_service.generate_coding_questions(interview.job_description)
+
+                    # 2. Verbal Transition Message (Dynamic)
+                    transition_msg = llm_service.generate_transition_message(history, user_text, interview.job_description)
+                    
+                    # Save Transition Message
+                    transition_msg_db = models.Message(interview_id=interview_id, role="assistant", content=transition_msg)
+                    db.add(transition_msg_db)
                     db.commit()
                     
-                    await websocket.send_json({"type": "ai_response", "content": closing_msg})
-                    await websocket.close()
-                    break
+                    # Send Audio Message
+                    await websocket.send_json({"type": "ai_response", "content": transition_msg})
+                    
+                    # 3. Send Coding Assessment Signal
+                    await websocket.send_json({
+                        "type": "coding_assessment", 
+                        "content": "Starting Coding Round...",
+                        "questions": coding_questions
+                    })
+                    
+                    # 4. Inject System Note for "Coding Phase"
+                    system_note = "SYSTEM: The interview has transitioned to the CODING PHASE. The candidate is now solving the coding questions. If they ask for clarification, help them, but do not solve it for them. If they say they are done, congratulate them."
+                    sys_msg_db = models.Message(interview_id=interview_id, role="system", content=system_note)
+                    db.add(sys_msg_db)
+                    db.commit()
+                    
+                    continue # Continue listening
 
                 ai_text = llm_service.generate_response(
                     user_message=user_text,
                     context=context,
                     job_description=interview.job_description,
-                    history=history
+                    history=history,
+                    round_type=interview.round_type,
+                    difficulty=interview.difficulty
                 )
                 
                 # 4. Save AI Response

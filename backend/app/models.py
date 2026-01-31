@@ -6,6 +6,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
+    full_name = Column(String, default="Candidate")
     hashed_password = Column(String)
 
 class Interview(Base):
@@ -16,6 +17,8 @@ class Interview(Base):
     job_description = Column(String)
     resume_text = Column(String)
     status = Column(String, default="PENDING")
+    round_type = Column(String, default="Technical")
+    difficulty = Column(String, default="Medium")
     duration_seconds = Column(Integer, default=0)
     created_at = Column(String) # Storing as ISO string for simplicity in MVP
     feedback_result = Column(String) # JSON string storing full feedback metrics
