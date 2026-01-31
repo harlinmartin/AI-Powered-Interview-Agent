@@ -15,3 +15,11 @@ export const ROLES = {
     "Mobile Developer": "Seeking a Mobile Developer (iOS or Android) to build native mobile applications. Experience with Swift/Kotlin or cross-platform frameworks like React Native/Flutter is a plus.",
     "QA Engineer": "Looking for a QA Engineer to design and execute automated test scripts. You will ensure software quality through rigorous testing and bug reporting."
 };
+
+export const ROUND_TYPES = [
+    "Technical",
+    "HR Round",
+    "Coding",
+    "System Design",
+    "Communication"
+];

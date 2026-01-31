@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { ResumeOptimizer } from '../components/ResumeOptimizer';
 import { AnalyticsDashboard } from '../components/AnalyticsDashboard';
+import { ScheduleInterviewModal } from '../components/ScheduleInterviewModal';
 
 import { COMPANIES, ROLES, EXPERIENCE_LEVELS } from '../utils/constants';
 
@@ -18,30 +19,11 @@ export const Dashboard = () => {
     const interviews = rawInterviews || [];
     const navigate = useNavigate();
 
-    // Data State
-    const [filteredCompanies, setFilteredCompanies] = useState([]);
-    const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
 
-    // Form State
-    const [jobDesc, setJobDesc] = useState('');
-    const [companyName, setCompanyName] = useState('');
-    const [targetRole, setTargetRole] = useState('');
-    const [experienceLevel, setExperienceLevel] = useState('Mid-Level');
-    const [file, setFile] = useState(null);
-    const [loading, setLoading] = useState(false);
-
-    // Update filtered companies when input changes
-    useEffect(() => {
-        if (companyName) {
-            const filtered = COMPANIES.filter(c => c.toLowerCase().includes(companyName.toLowerCase()));
-            setFilteredCompanies(filtered);
-        } else {
-            setFilteredCompanies([]);
-        }
-    }, [companyName]);
 
     const [currentTab, setCurrentTab] = useState('home');
     const [showModal, setShowModal] = useState(false);
+    const [loading, setLoading] = useState(false);
 
     // Settings State
     const [profileName, setProfileName] = useState(user?.name || (user?.email || 'User').split('@')[0]);
@@ -108,16 +90,18 @@ export const Dashboard = () => {
         }
     }, [interviews]);
 
-    const handleStart = async (e) => {
-        e.preventDefault();
-        if (!file || !jobDesc) { alert("Please provide both Resume and Job Description"); return; }
+    const handleStartInterview = async (file, compositeJD, roundType, difficulty) => {
         setLoading(true);
         try {
-            const compositeJD = `TARGET COMPANY: ${companyName || 'General'}\nTARGET ROLE: ${targetRole}\nLEVEL: ${experienceLevel}\nJD: ${jobDesc}`;
-            const id = await uploadResume(file, compositeJD);
+            const id = await uploadResume(file, compositeJD, roundType, difficulty);
             setCurrentInterviewId(id);
             navigate(`/interview/${id}`);
-        } catch (err) { alert("Upload failed."); } finally { setLoading(false); }
+        } catch (err) {
+            console.error(err);
+            alert("Upload failed.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleLogout = () => { logout(); navigate('/login'); };
@@ -126,42 +110,62 @@ export const Dashboard = () => {
     const handleNav = (tab) => setCurrentTab(tab);
 
     return (
-        <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
-            {/* Top Navigation Bar */}
-            <nav className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-10">
-                <div className="flex items-center gap-3">
+        <div className="flex min-h-screen bg-gray-50 text-gray-900 font-sans">
+            {/* Sidebar Navigation */}
+            <aside className="w-64 bg-white border-r border-gray-200 flex flex-col fixed h-full z-20 shadow-sm">
+                <div className="h-16 flex items-center px-6 border-b border-gray-200 gap-3">
                     <div className="bg-blue-600 text-white p-1.5 rounded">
                         <Briefcase size={20} />
                     </div>
                     <span className="font-bold text-xl tracking-tight text-gray-800">ElevateAI</span>
                 </div>
 
-                <div className="hidden md:flex items-center gap-6">
-                    <button onClick={() => handleNav('home')} className={`text-sm font-medium ${currentTab === 'home' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>Overview</button>
-                    <button onClick={() => handleNav('history')} className={`text-sm font-medium ${currentTab === 'history' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>History</button>
-                    <button onClick={() => handleNav('analytics')} className={`text-sm font-medium ${currentTab === 'analytics' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>Analytics</button>
-                    <button onClick={() => handleNav('optimizer')} className={`text-sm font-medium ${currentTab === 'optimizer' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>Resume</button>
-                </div>
+                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                    <button onClick={() => handleNav('home')} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${currentTab === 'home' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'}`}>
+                        <Home size={20} />
+                        Overview
+                    </button>
+                    <button onClick={() => handleNav('history')} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${currentTab === 'history' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'}`}>
+                        <Clock size={20} />
+                        History
+                    </button>
+                    <button onClick={() => handleNav('analytics')} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${currentTab === 'analytics' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'}`}>
+                        <BarChart3 size={20} />
+                        Analytics
+                    </button>
+                    <button onClick={() => handleNav('optimizer')} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${currentTab === 'optimizer' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'}`}>
+                        <FileSearch size={20} />
+                        Resume
+                    </button>
+                </nav>
 
-                <div className="flex items-center gap-4">
-                    <div className="text-right hidden sm:block">
-                        <div className="text-sm font-medium">{user?.name}</div>
-                        <div className="text-xs text-gray-500">{user?.email}</div>
+                <div className="p-4 border-t border-gray-200">
+                    <div className="flex items-center gap-3 px-2 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0">
+                            {user?.name?.charAt(0) || 'U'}
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                            <div className="text-sm font-medium truncate">{user?.name}</div>
+                            <div className="text-xs text-gray-500 truncate">{user?.email}</div>
+                        </div>
                     </div>
-                    <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-500 transition">
-                        <LogOut size={20} />
+                    <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <LogOut size={18} />
+                        Sign Out
                     </button>
                 </div>
-            </nav>
+            </aside>
 
-            <div className="max-w-7xl mx-auto p-6 md:p-8">
-                {/* Main Content Area */}
-
+            {/* Main Content Area */}
+            <main className="flex-1 ml-64 p-8">
                 {/* Home Tab Overview */}
                 {currentTab === 'home' && (
                     <div className="space-y-8">
                         <div className="flex justify-between items-center">
-                            <h1 className="text-2xl font-bold text-gray-800">Dashboard Overview</h1>
+                            <div className="space-y-1">
+                                <h1 className="text-3xl font-bold text-gray-900">Hi {user?.name || 'there'},</h1>
+                                <p className="text-gray-500">Ready to ace your next interview?</p>
+                            </div>
                             <button
                                 onClick={() => setShowModal(true)}
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition"
@@ -187,11 +191,6 @@ export const Dashboard = () => {
                                 label="Hours Practiced"
                                 value={stats.hoursPracticed}
                             />
-                            <StatCard
-                                icon={<FileSearch size={24} className="text-purple-500" />}
-                                label="Plan"
-                                value="Standard"
-                            />
                         </div>
 
                         {/* Recent Activity List */}
@@ -202,7 +201,7 @@ export const Dashboard = () => {
                             </div>
                             <div className="divide-y divide-gray-100">
                                 {interviews.slice(0, 5).map((inv) => (
-                                    <div key={inv.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition cursor-pointer" onClick={() => navigate(`/interview/${inv.id}`)}>
+                                    <div key={inv.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition cursor-pointer" onClick={() => navigate(inv.status === 'COMPLETED' ? `/feedback/${inv.id}` : `/interview/${inv.id}`)}>
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
                                                 {inv.status === 'COMPLETED' ? <CheckCircle2 size={20} className="text-green-500" /> : <Clock size={20} />}
@@ -254,106 +253,12 @@ export const Dashboard = () => {
                 {currentTab === 'optimizer' && <ResumeOptimizer />}
 
                 {/* New Session Modal */}
-                {showModal && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                        <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 animate-in fade-in zoom-in duration-200">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-xl font-bold text-gray-800">Start New Interview</h2>
-                                <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                                    <Plus size={24} className="rotate-45" />
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleStart} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Target Company</label>
-                                    <div className="relative">
-                                        <input
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                            placeholder="e.g. Amazon, Startup..."
-                                            value={companyName}
-                                            onChange={(e) => { setCompanyName(e.target.value); setShowCompanyDropdown(true); }}
-                                        />
-                                        {showCompanyDropdown && companyName && filteredCompanies.length > 0 && (
-                                            <div className="absolute top-full left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 max-h-40 overflow-y-auto">
-                                                {filteredCompanies.map(c => (
-                                                    <div
-                                                        key={c}
-                                                        className="px-4 py-2 hover:bg-gray-50 cursor-pointer text-sm"
-                                                        onClick={() => { setCompanyName(c); setShowCompanyDropdown(false); }}
-                                                    >
-                                                        {c}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                                        <select
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                            value={targetRole}
-                                            onChange={(e) => {
-                                                const role = e.target.value;
-                                                setTargetRole(role);
-                                                if (role !== 'Custom' && ROLES[role]) setJobDesc(ROLES[role]);
-                                            }}
-                                        >
-                                            <option value="" disabled>Select Role</option>
-                                            <option value="Custom">Custom</option>
-                                            {Object.keys(ROLES).filter(r => r !== 'Custom').map(r => <option key={r} value={r}>{r}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Level</label>
-                                        <select
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                            value={experienceLevel}
-                                            onChange={(e) => setExperienceLevel(e.target.value)}
-                                        >
-                                            {EXPERIENCE_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Job Description</label>
-                                    <textarea
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none h-24 resize-none"
-                                        placeholder="Paste the job description here..."
-                                        value={jobDesc}
-                                        onChange={(e) => setJobDesc(e.target.value)}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Upload Resume (PDF)</label>
-                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition cursor-pointer relative">
-                                        <input
-                                            type="file"
-                                            accept=".pdf"
-                                            onChange={(e) => setFile(e.target.files?.[0])}
-                                            className="absolute inset-0 opacity-0 cursor-pointer"
-                                        />
-                                        <Upload className="mx-auto text-gray-400 mb-2" size={24} />
-                                        <span className="text-sm text-gray-600">{file ? file.name : "Click to upload"}</span>
-                                    </div>
-                                </div>
-
-                                <button
-                                    className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition disabled:opacity-50"
-                                    disabled={loading}
-                                >
-                                    {loading ? 'Processing...' : 'Start Interview'}
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                )}
-            </div>
+                <ScheduleInterviewModal
+                    isOpen={showModal}
+                    onClose={() => setShowModal(false)}
+                    onStart={handleStartInterview}
+                />
+            </main>
         </div>
     );
 };

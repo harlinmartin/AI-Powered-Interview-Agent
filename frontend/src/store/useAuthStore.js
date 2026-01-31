@@ -26,6 +26,17 @@ export const useAuthStore = create((set) => ({
     register: async (email, password) => {
         await axios.post(`${API_URL}/register`, { email, password });
     },
+    googleLogin: async (email, name) => {
+        const response = await axios.post(`${API_URL}/google-login`, { email, name });
+        const token = response.data.access_token;
+        const userObj = { email, name };
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(userObj));
+        set({ token, user: userObj });
+    },
+    resetPassword: async (email, newPassword) => {
+        await axios.post(`${API_URL}/forgot-password`, { email, new_password: newPassword });
+    },
     logout: () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
