@@ -84,7 +84,7 @@ export const Login = () => {
                                         try {
                                             const decoded = jwtDecode(credentialResponse.credential);
                                             console.log("Google Login Success", decoded);
-                                            await googleLogin(decoded.email, decoded.name);
+                                            await googleLogin(credentialResponse.credential, decoded.email, decoded.name);
                                             navigate('/dashboard');
                                         } catch (error) {
                                             console.error("Google Login Error:", error);

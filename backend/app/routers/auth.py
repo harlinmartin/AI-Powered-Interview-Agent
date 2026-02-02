@@ -10,6 +10,8 @@ from .. import models, schemas
 from ..database import get_db
 
 import os
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 router = APIRouter(tags=["Authentication"])
 
@@ -83,32 +85,42 @@ def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: Sessio
     return {"access_token": access_token, "token_type": "bearer"}
 
 class GoogleLoginData(BaseModel):
-    email: str
-    name: str
+    token: str
 
 @router.post("/google-login", response_model=schemas.Token)
 def google_login(data: GoogleLoginData, db: Session = Depends(get_db)):
-    # Mock Google Login: Check if user exists, else create
-    user = db.query(models.User).filter(models.User.email == data.email).first()
-    if not user:
-        # Create new user without password (or dummy)
-        hashed_password = get_password_hash("google_auth_dummy_password")
-        new_user = models.User(email=data.email, full_name=data.name, hashed_password=hashed_password)
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-        user = new_user
-    else:
-        # Update name if changed
-        if user.full_name != data.name:
-            user.full_name = data.name
+    try:
+        # Verify the token with Google
+        CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+        id_info = id_token.verify_oauth2_token(data.token, requests.Request(), CLIENT_ID)
+
+        email = id_info['email']
+        name = id_info.get('name', '')
+        
+        # Check if user exists
+        user = db.query(models.User).filter(models.User.email == email).first()
+        if not user:
+            # Create new user
+            hashed_password = get_password_hash("google_auth_dummy_password")
+            new_user = models.User(email=email, full_name=name, hashed_password=hashed_password)
+            db.add(new_user)
             db.commit()
-            
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+            db.refresh(new_user)
+            user = new_user
+        else:
+            # Update name if changed
+            if name and user.full_name != name:
+                user.full_name = name
+                db.commit()
+        
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.email}, expires_delta=access_token_expires
+        )
+        return {"access_token": access_token, "token_type": "bearer"}
+        
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail="Invalid Google Token")
 
 class PasswordReset(BaseModel):
     email: str
