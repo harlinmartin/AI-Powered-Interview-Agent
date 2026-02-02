@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @layer utilities {
     .animate-fade-in {
         animation: fadeIn 0.5s ease-out;
@@ -11,6 +13,16 @@
 
     .animate-spin-slow {
         animation: spin 3s linear infinite;
+    }
+
+    .glass-card {
+        @apply bg-white/80 backdrop-blur-md border border-slate-200 shadow-sm;
+    }
+}
+
+@layer base {
+    body {
+        @apply bg-slate-50 text-slate-900 font-sans;
     }
 }
 
