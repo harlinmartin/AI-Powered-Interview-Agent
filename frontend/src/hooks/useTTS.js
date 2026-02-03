@@ -39,6 +39,10 @@ export const useTTS = () => {
         utterance.onend = () => {
             console.log("TTS: Ended");
             setSpeaking(false);
+            // Force small delay before allowing mic to ensure audio clear
+            setTimeout(() => {
+                setSpeaking(false);
+            }, 100);
         };
         utterance.onerror = (e) => {
             console.error("TTS: Error", e);

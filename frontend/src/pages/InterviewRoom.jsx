@@ -8,6 +8,7 @@ import {
     Mic, MicOff, PhoneOff, Video, VideoOff,
     Monitor, Captions, PlayCircle, Code
 } from 'lucide-react';
+import { ProfessionalWorkspace } from '../components/ProfessionalWorkspace';
 
 export const InterviewRoom = () => {
     const { id } = useParams();
@@ -25,8 +26,14 @@ export const InterviewRoom = () => {
     const [isMuted, setIsMuted] = useState(false);
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [showCodeEditor, setShowCodeEditor] = useState(false);
-    const [code, setCode] = useState("// Type your code here if asked...");
-    const [language, setLanguage] = useState("javascript");
+
+
+    // Professional Workspace State
+    const [activeCodeTab, setActiveCodeTab] = useState('q1');
+    const [questions, setQuestions] = useState({
+        q1: { id: 'q1', title: 'Question 1', code: '// Waiting for Question 1...', language: 'javascript', desc: 'No question loaded yet.' },
+        q2: { id: 'q2', title: 'Question 2', code: '// Waiting for Question 2...', language: 'python', desc: 'No question loaded yet.' }
+    });
 
     // Voice Hooks
     const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition();
@@ -110,7 +117,9 @@ export const InterviewRoom = () => {
         console.log("Attempting WebSocket Connection...");
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setWsStatus("Connecting...");
-        const socket = new WebSocket(`ws://localhost:8000/interview/ws/${id}?token=${token}`);
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const WS_URL = API_URL.replace(/^http/, 'ws');
+        const socket = new WebSocket(`${WS_URL}/interview/ws/${id}?token=${token}`);
 
         socket.onopen = () => {
             console.log("WS Connected");
@@ -128,8 +137,46 @@ export const InterviewRoom = () => {
             if (data.type === 'coding_assessment') {
                 console.log("Starting Coding Assessment");
                 setShowCodeEditor(true);
-                setCode(data.questions); // Pre-fill questions
-                // Optional: Force a specific layout or maximize editor
+
+                setQuestions(prev => {
+                    let newQuestions = { ...prev };
+
+                    if (typeof data.questions === 'string') {
+                        const fullText = data.questions;
+                        let q1Text = "", q2Text = "";
+
+                        // Robust Clean Split
+                        if (fullText.includes("// Question 2:")) {
+                            const parts = fullText.split("// Question 2:");
+                            q1Text = parts[0].trim();
+                            q2Text = "// Question 2:\n" + parts[1].trim();
+                        } else if (fullText.includes("# Question 2:")) {
+                            const parts = fullText.split("# Question 2:");
+                            q1Text = parts[0].trim();
+                            q2Text = "# Question 2:\n" + parts[1].trim();
+                        } else {
+                            // Fallback: Duplicate text to Q1 if no split found
+                            q1Text = fullText;
+                            q2Text = "// No specific Question 2 found.";
+                        }
+
+                        newQuestions.q1 = {
+                            ...newQuestions.q1,
+                            desc: q1Text,
+                            code: q1Text + "\n\n// Write your solution below:\n"
+                        };
+
+                        newQuestions.q2 = {
+                            ...newQuestions.q2,
+                            desc: q2Text,
+                            code: q2Text + "\n\n// Write your solution below:\n"
+                        };
+
+                    } else if (data.questions && typeof data.questions === 'object') {
+                        return { ...prev, ...data.questions };
+                    }
+                    return newQuestions;
+                });
             }
         };
 
@@ -151,16 +198,23 @@ export const InterviewRoom = () => {
     useEffect(() => {
         if (!started) return;
 
+        console.log(`Speech Logic: AI Speaking: ${aiSpeaking}, Muted: ${isMuted}`);
+
         if (aiSpeaking) {
             SpeechRecognition.stopListening();
         } else {
-            if (!isMuted) {
-                SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
-            } else {
+            if (!isMuted && !listening) {
+                try {
+                    SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
+                    console.log("Speech Logic: Started Listening");
+                } catch (e) {
+                    console.error("Speech Logic: Start Failed", e);
+                }
+            } else if (isMuted) {
                 SpeechRecognition.stopListening();
             }
         }
-    }, [aiSpeaking, started, isMuted]);
+    }, [aiSpeaking, started, isMuted, listening]);
 
     // 8. Transcript Sender
     useEffect(() => {
@@ -173,7 +227,7 @@ export const InterviewRoom = () => {
                 wsRef.current.send(JSON.stringify({ type: 'user_audio_text', content: transcript }));
                 resetTranscript();
             }
-        }, 3000); // Increased debounce to 3s for better accuracy
+        }, 1200); // Reduced debounce to 1.2s for faster response
 
         return () => clearTimeout(handler);
     }, [transcript, resetTranscript]);
@@ -216,11 +270,37 @@ export const InterviewRoom = () => {
         );
     }
 
+    const handleEndInterview = async () => {
+        // Call finalize API
+        if (token && id) {
+            try {
+                const formData = new FormData();
+                formData.append('duration_seconds', (600 - remainingTime).toString());
+                // Send Code
+                if (showCodeEditor) {
+                    // Send all answers
+                    const finalCode = JSON.stringify(questions);
+                    formData.append('code_content', finalCode);
+                }
+
+                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+                await fetch(`${API_URL}/interview/${id}/finalize`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+            } catch (e) {
+                console.error("Failed to save duration", e);
+            }
+        }
+        navigate('/feedback/' + id);
+    };
+
     return (
         <div className="flex flex-col md:flex-row h-screen bg-gray-950 text-white p-4 gap-4 overflow-hidden relative">
 
             {/* LEFT: AI & Info */}
-            <div className={`${showCodeEditor ? 'w-1/4' : 'w-1/3'} flex flex-col gap-4 transition-all duration-300 hidden md:flex`}>
+            <div className={`${showCodeEditor ? 'w-1/5' : 'w-1/3'} flex flex-col gap-4 transition-all duration-300 hidden md:flex`}>
                 <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800 flex-1 flex flex-col justify-center items-center relative shadow-inner">
                     {/* Think Buffer */}
                     {aiThinking && (
@@ -229,7 +309,7 @@ export const InterviewRoom = () => {
                         </div>
                     )}
 
-                    <div className={`rounded-full flex items-center justify-center transition-all duration-500 ${aiSpeaking ? 'bg-blue-600 scale-105 shadow-[0_0_50px_blue]' : aiThinking ? 'bg-purple-600 animate-bounce' : 'bg-gray-800'} ${showCodeEditor ? 'w-32 h-32 text-4xl' : 'w-56 h-56 text-7xl'}`}>
+                    <div className={`rounded-full flex items-center justify-center transition-all duration-500 ${aiSpeaking ? 'bg-blue-600 scale-105 shadow-[0_0_50px_blue]' : aiThinking ? 'bg-purple-600 animate-bounce' : 'bg-gray-800'} ${showCodeEditor ? 'w-24 h-24 text-2xl' : 'w-56 h-56 text-7xl'}`}>
                         {aiSpeaking ? '🔊' : aiThinking ? '💭' : '🤖'}
                     </div>
 
@@ -257,9 +337,14 @@ export const InterviewRoom = () => {
                             )}
                         </div>
                         {!aiSpeaking && (
-                            <button onClick={() => speak(aiResponse)} className="mt-2 text-xs text-blue-400 hover:underline flex items-center gap-1 mx-auto">
-                                <PlayCircle size={12} /> Replay Audio
-                            </button>
+                            <div className="flex flex-col gap-2">
+                                <button onClick={() => speak(aiResponse)} className="mt-2 text-xs text-blue-400 hover:underline flex items-center gap-1 mx-auto">
+                                    <PlayCircle size={12} /> Replay Audio
+                                </button>
+                                {transcript && (
+                                    <span className="text-xs text-green-400 font-mono animate-pulse">Hearing: "{transcript}"</span>
+                                )}
+                            </div>
                         )}
                     </div>
                 </div>
@@ -275,28 +360,15 @@ export const InterviewRoom = () => {
 
             {/* MIDDLE: Code Editor (Conditional) */}
             {showCodeEditor && (
-                <div className="flex-1 bg-gray-900 rounded-2xl border border-gray-700 flex flex-col overflow-hidden animate-fade-in-up shadow-2xl z-10">
-                    <div className="bg-gray-800 p-3 border-b border-gray-700 flex justify-between items-center">
-                        <span className="font-bold text-sm text-gray-300 pl-2">Live Codepad</span>
-                        <div className="flex gap-2">
-                            <select
-                                value={language}
-                                onChange={(e) => setLanguage(e.target.value)}
-                                className="bg-gray-900 text-xs text-gray-300 px-2 py-1 rounded border border-gray-700 focus:outline-none focus:border-blue-500"
-                            >
-                                <option value="javascript">JavaScript</option>
-                                <option value="python">Python</option>
-                                <option value="java">Java</option>
-                                <option value="cpp">C++</option>
-                            </select>
-                        </div>
-                    </div>
-                    <textarea
-                        value={code}
-                        onChange={(e) => setCode(e.target.value)}
-                        className="flex-1 bg-[#1e1e1e] p-6 font-mono text-sm text-green-400 focus:outline-none resize-none leading-relaxed"
-                        spellCheck={false}
-                        placeholder={`// Write your ${language} code here...`}
+                <div className="flex-[2] rounded-2xl flex flex-col overflow-hidden animate-fade-in-up shadow-2xl z-10 h-full">
+                    <ProfessionalWorkspace
+                        items={questions}
+                        activeTab={activeCodeTab}
+                        onStateChange={(newItems, newActiveTab) => {
+                            setQuestions(newItems);
+                            if (newActiveTab) setActiveCodeTab(newActiveTab);
+                        }}
+                        onSubmit={handleEndInterview}
                     />
                 </div>
             )}
@@ -392,29 +464,7 @@ export const InterviewRoom = () => {
 
                     {/* End Call */}
                     <button
-                        onClick={async () => {
-                            // Call finalize API
-                            if (token && id) {
-                                try {
-                                    const formData = new FormData();
-                                    formData.append('duration_seconds', (600 - remainingTime).toString());
-                                    // Send Code
-                                    if (showCodeEditor) {
-                                        formData.append('code_content', code);
-                                    }
-
-                                    await fetch(`http://localhost:8000/interview/${id}/finalize`, {
-                                        method: 'POST',
-                                        headers: { 'Authorization': `Bearer ${token}` },
-                                        body: formData
-                                    });
-                                } catch (e) {
-                                    console.error("Failed to save duration", e);
-                                }
-                            }
-                            // navigate('/code-test/' + id);
-                            navigate('/feedback/' + id);
-                        }}
+                        onClick={handleEndInterview}
                         className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:shadow-red-600/30 transition flex items-center gap-2"
                     >
                         <PhoneOff size={20} /> <span className="hidden sm:inline">End Interview</span>
