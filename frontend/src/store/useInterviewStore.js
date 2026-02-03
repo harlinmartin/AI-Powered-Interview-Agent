@@ -49,5 +49,18 @@ export const useInterviewStore = create((set) => ({
             console.error("Failed to fetch interviews");
         }
     },
+    analyticsData: null,
+    fetchAnalytics: async () => {
+        const token = useAuthStore.getState().token;
+        if (!token) return;
+        try {
+            const response = await axios.get(`${API_URL}/analytics/user`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            set({ analyticsData: response.data });
+        } catch (e) {
+            console.error("Failed to fetch analytics", e);
+        }
+    },
     setCurrentInterviewId: (id) => set({ currentInterviewId: id })
 }));
