@@ -327,7 +327,7 @@ ${ROLES[formData.position] || 'Standard interview process.'}
                                 disabled={loading || !formData.file}
                                 className="px-8 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2"
                             >
-                                {loading ? 'Starting...' : 'Start Interview'}
+                                {loading ? 'Initializing Session...' : 'Start Interview'}
                             </button>
                         )}
                     </div>

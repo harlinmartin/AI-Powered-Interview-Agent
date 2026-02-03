@@ -15,7 +15,8 @@ export const FeedbackReport = () => {
     useEffect(() => {
         const fetchFeedback = async () => {
             try {
-                const res = await fetch(`http://localhost:8000/interview/${id}/feedback`, {
+                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+                const res = await fetch(`${API_URL}/interview/${id}/feedback`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -78,6 +79,20 @@ export const FeedbackReport = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Code Review Section (New) */}
+                {data?.code_feedback && (
+                    <div className="bg-[#1e1e1e] rounded-3xl p-8 border border-gray-800 shadow-2xl mb-8">
+                        <h3 className="text-xl font-bold text-blue-400 mb-4 flex items-center gap-2">
+                            <div className="p-2 bg-blue-900/30 rounded-lg"><BookOpen size={20} /></div>
+                            Code Quality Review
+                        </h3>
+                        <div className="prose prose-invert max-w-none text-gray-300">
+                            <p className="whitespace-pre-line leading-relaxed">{data.code_feedback}</p>
+                        </div>
+                    </div>
+                )}
+
 
                 {/* Grid Layout */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

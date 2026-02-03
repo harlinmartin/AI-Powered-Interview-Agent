@@ -206,7 +206,7 @@ class LLMService:
 
     def optimize_resume_for_ats(self, resume_text: str, job_description: str) -> str:
         if not self.client:
-             return '{"ats_score": 0, "optimized_text": "Mock Optimized Text", "missing_keywords": ["Python"], "formatting_issues": ["Use standard font"]}'
+             return '{"ats_score": 0, "optimized_content": "Mock Optimized Text", "missing_keywords": ["Python"], "formatting_issues": ["Use standard font"]}'
 
         system_prompt = """You are an ATS (Applicant Tracking System) Optimization Expert.
         
@@ -217,16 +217,22 @@ class LLMService:
         {resume_text}
 
         Your Task:
-        1. **ANALYZE THE ROLE**: Identify if this is Backend, Frontend, Full Stack, ML, etc.
-        2. **CALCULATE ATS SCORE**: (0-100) based on keyword matching.
-        3. **IDENTIFY GAPS**: Missing critical keywords.
-        4. **ROLE-SPECIFIC ADVICE**:
+        1. **VALIDATION**: First, determine if the provided RESUME TEXT is actually a resume or CV.
+           - If it is a recipe, code file, book chapter, random text, or irrelevant document:
+             Output JSON with: {{ "error": "The uploaded file does not appear to be a valid resume. It seems to be [brief description of what it is]." }}
+             AND STOP.
+
+        2. **ANALYZE THE ROLE**: Identify if this is Backend, Frontend, Full Stack, ML, etc.
+        3. **CALCULATE ATS SCORE**: (0-100) based on keyword matching.
+        4. **IDENTIFY GAPS**: Missing critical keywords.
+        5. **ROLE-SPECIFIC ADVICE**:
            - **Projects to Highlight**: Suggest 1-2 specific projects the candidate should describe to match this specific role (e.g. "For Backend, highlight your API scaling project").
            - **Weak Bullets**: Quote 1 specific weak bullet point from the resume and rewrite it to be impact-driven (X-Y-Z formula).
-        5. **REWRITE**: improved "Summary" and "Skills".
+        6. **REWRITE**: improved "Summary" and "Skills".
 
         Output ONLY valid JSON:
         {{
+            "error": null,
             "ats_score": <int>,
             "missing_keywords": ["list", "of", "keywords"],
             "formatting_issues": ["list", "of", "issues"],
@@ -288,9 +294,10 @@ class LLMService:
 
         **CRITICAL SCORING RULES**:
         1. **CHECK CODE SUBMISSION**: Look for "CODE SUBMISSION" or "SYSTEM" messages containing code.
-        2. **EMPTY/DEFAULT CODE**: If the code is just `// Type your code here if asked...` or empty, **SCORE MUST BE 0**.
-        3. **NO CODE**: If there is no code submission in a Coding Round, likely score < 40.
-        4. **STRICT GRADING**: Do not be generous. If they didn't write code for a coding question, they FAILED.
+        2. **EMPTY/DEFAULT CODE**: If the code matches default templates or is missing, **SCORE MUST BE 0**.
+        3. **NO CODE**: If there is no code submission in a Coding Round, SCORE = 0.
+        4. **STRICT GRADING**: Do not be generous. No code = FAIL.
+        5. **OVERRIDE**: Even if the conversation was good, if they failed to write code in a coding interview, the MAX score is 0.
 
         Output ONLY valid JSON:
         {{
@@ -302,6 +309,7 @@ class LLMService:
                 "confidence": <0-100>
             }},
             "summary": "2-3 sentences summary.",
+            "code_feedback": "Detailed review of the submitted code (Efficiency, Style, Correctness). If no code, say 'No code submitted'.",
             "strengths": ["list"],
             "weaknesses": ["list"],
             "suggestions": ["list"]
@@ -369,13 +377,27 @@ class LLMService:
         JOB DESCRIPTION:
         {job_description}
 
-        Your Task: Generate 2 coding questions (Data Structures & Algorithms) suitable for this role.
+        Your Task: Generate 2 coding questions suitable for this role.
+        
+        **Rules for Question Selection**:
+        1. **Frontend Role (React, Vue, Web)**: 
+           - Q1: Practical UI task (e.g., "Build a Counter hook", "Create a Debounce function", "Implement a simple Todo reducer").
+           - Q2: DOM/JS manipulation or simple Algo (e.g., "Flatten array", "Finding unique elements").
+           
+        2. **Backend Role (Python, Node, API)**:
+           - Q1: Data processing/API task (e.g., "Design a rate limiter function", "Parse a log file").
+           - Q2: Algorithmic task (e.g., "Valid Anagram", "LRU Cache").
+           
+        3. **General/Fullstack**:
+           - Mix of above or standard DSA.
+
         Output ONLY the questions as code comments (starting with // or #).
         Do not add any introductory text.
         
         Format:
         // Question 1: [Question Text]
         // [Constraints/Examples]
+        // [Starter Code if helpful]
         
         // Question 2: [Question Text]
         // [Constraints/Examples]
