@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useToast } from '../contexts/ToastContext';
 import { useAuthStore } from '../store/useAuthStore';
 import { useInterviewStore } from '../store/useInterviewStore';
 import { useNavigate } from 'react-router-dom';
@@ -14,6 +15,7 @@ import { ScheduleInterviewModal } from '../components/ScheduleInterviewModal';
 import { COMPANIES, ROLES, EXPERIENCE_LEVELS } from '../utils/constants';
 
 export const Dashboard = () => {
+    const { success, error: toastError } = useToast();
     const { user, logout, updateUser } = useAuthStore();
     const { interviews: rawInterviews, fetchInterviews, uploadResume, setCurrentInterviewId } = useInterviewStore();
     const interviews = rawInterviews || [];
@@ -44,7 +46,7 @@ export const Dashboard = () => {
         updateUser({ name: profileName, email: profileEmail });
         setTimeout(() => {
             setLoading(false);
-            alert("Profile updated successfully!");
+            success("Profile updated successfully!");
         }, 500);
     };
 
@@ -55,7 +57,7 @@ export const Dashboard = () => {
     const handleAvatarChange = (e) => {
         if (e.target.files?.[0]) {
             setAvatarFile(e.target.files[0]);
-            alert("Avatar uploaded!");
+            success("Avatar uploaded!");
         }
     };
 
@@ -136,7 +138,7 @@ export const Dashboard = () => {
             navigate(`/interview/${id}`);
         } catch (err) {
             console.error(err);
-            alert("Upload failed.");
+            toastError("Upload failed.");
         } finally {
             setLoading(false);
         }
@@ -173,14 +175,14 @@ export const Dashboard = () => {
                     </button>
                     <button onClick={() => handleNav('optimizer')} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${currentTab === 'optimizer' ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-200' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
                         <FileSearch size={18} />
-                        Resume
+                        Resume Optimization
                     </button>
                 </nav>
 
                 <div className="p-4 border-t border-slate-200">
                     <div className="flex items-center gap-3 px-2 mb-3">
                         <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold shrink-0 border border-blue-200">
-                            {user?.name?.charAt(0) || 'U'}
+                            {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 overflow-hidden">
                             <div className="text-sm font-semibold text-slate-700 truncate">{user?.name}</div>
@@ -213,7 +215,7 @@ export const Dashboard = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
-                        {currentTab === 'home' && (
+                        {currentTab === 'home' && interviews.length > 0 && (
                             <button
                                 onClick={() => setShowModal(true)}
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 transition shadow-sm shadow-blue-500/20 active:scale-95"
@@ -313,29 +315,60 @@ export const Dashboard = () => {
                     {currentTab === 'history' && (
                         <div className="glass-card rounded-xl p-6 animate-fade-in-up">
                             <div className="space-y-4">
-                                {interviews.map((inv) => (
-                                    <div key={inv.id} className="border border-slate-200 rounded-lg p-5 flex justify-between items-center hover:border-blue-200 hover:shadow-sm transition bg-white">
-                                        <div>
-                                            <h4 className="font-semibold text-slate-800">{inv.job_description.split('\n')[0].substring(0, 60)}...</h4>
-                                            <div className="flex items-center gap-2 mt-2">
-                                                <span className="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                                                    {new Date(inv.created_at).toLocaleString()}
-                                                </span>
-                                                {inv.status === 'COMPLETED' && (
-                                                    <span className="text-xs font-bold text-emerald-600 pl-2">
-                                                        Score: {JSON.parse(inv.feedback_result || '{}').score || 0}%
+                                {interviews.map((inv) => {
+                                    const feedback = inv.feedback_result ? JSON.parse(inv.feedback_result) : {};
+                                    const score = feedback.score || 0;
+                                    const metrics = feedback.metrics || {};
+
+                                    return (
+                                        <div key={inv.id} className="border border-slate-200 rounded-lg p-5 flex flex-col md:flex-row justify-between items-center hover:border-blue-200 hover:shadow-md transition bg-white gap-4">
+                                            <div className="flex-1">
+                                                <h4 className="font-semibold text-slate-800">{inv.job_description.split('\n')[0].substring(0, 60)}...</h4>
+                                                <div className="flex items-center gap-2 mt-2">
+                                                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
+                                                        <Clock size={12} /> {new Date(inv.created_at).toLocaleString()}
                                                     </span>
-                                                )}
+                                                    {inv.status === 'COMPLETED' && (
+                                                        <>
+                                                            {/* Mini Skill Badges */}
+                                                            <span title="Technical Score" className="text-xs font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                                                                Tech: {metrics.technical || 0}
+                                                            </span>
+                                                            <span title="Communication Score" className="text-xs font-bold px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
+                                                                Comm: {metrics.communication || 0}
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
+
+                                            {/* Mini Analytics Section */}
+                                            {inv.status === 'COMPLETED' && (
+                                                <div className="flex items-center gap-4 min-w-[200px]">
+                                                    <div className="flex-1">
+                                                        <div className="flex justify-between text-xs mb-1 font-semibold text-slate-600">
+                                                            <span>Overall Score</span>
+                                                            <span className={score >= 70 ? 'text-emerald-600' : 'text-amber-600'}>{score}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                            <div
+                                                                className={`h-full rounded-full ${score >= 70 ? 'bg-emerald-500' : score >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                                                style={{ width: `${score}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <button
+                                                onClick={() => navigate(inv.status === 'COMPLETED' ? `/feedback/${inv.id}` : `/interview/${inv.id}`)}
+                                                className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition whitespace-nowrap"
+                                            >
+                                                {inv.status === 'COMPLETED' ? 'View Report' : 'Resume'}
+                                            </button>
                                         </div>
-                                        <button
-                                            onClick={() => navigate(inv.status === 'COMPLETED' ? `/feedback/${inv.id}` : `/interview/${inv.id}`)}
-                                            className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition"
-                                        >
-                                            {inv.status === 'COMPLETED' ? 'View Report' : 'Resume'}
-                                        </button>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                                 {interviews.length === 0 && <p className="text-slate-500 mt-2">No history available.</p>}
                             </div>
                         </div>
