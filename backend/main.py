@@ -1,10 +1,13 @@
 from dotenv import load_dotenv
+import os
+
+# Default load (respects existing env vars)
 load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app import models, database
-from app.routers import auth, interview
+from app.routers import auth, interview, analytics
 
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -31,6 +34,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(interview.router)
+app.include_router(analytics.router)
 
 @app.get("/")
 def read_root():

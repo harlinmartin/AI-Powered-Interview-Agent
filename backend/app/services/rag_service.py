@@ -7,7 +7,14 @@ import pypdf
 import io
 
 # Local Qdrant (Disk persistence)
-client = QdrantClient(path="qdrant_db")
+# Local Qdrant (Disk persistence) or Server
+qdrant_url = os.getenv("QDRANT_URL")
+if qdrant_url:
+    print(f"INFO: Connecting to Qdrant at {qdrant_url}")
+    client = QdrantClient(url=qdrant_url)
+else:
+    print("INFO: Using local Qdrant (disk)")
+    client = QdrantClient(path="qdrant_db")
 COLLECTION_NAME = "resume_chunks"
 
 embedding_model = TextEmbedding()

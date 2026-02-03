@@ -2,8 +2,8 @@
 
 # Stop and remove existing containers if they exist
 echo "Stopping old containers..."
-docker stop interview-frontend interview-backend interview_db 2>/dev/null
-docker rm interview-frontend interview-backend interview_db 2>/dev/null
+docker stop interview-frontend interview-backend interview_db interview-qdrant 2>/dev/null
+docker rm interview-frontend interview-backend interview_db interview-qdrant 2>/dev/null
 
 # Create network
 docker network create interview_network 2>/dev/null || true
@@ -24,6 +24,15 @@ docker run -d \
 echo "Waiting for DB to initialize..."
 sleep 5
 
+# 1.5 Start Qdrant
+echo "Starting Qdrant..."
+docker run -d \
+  --name interview-qdrant \
+  --network interview_network \
+  -p 6333:6333 \
+  -v qdrant_storage:/qdrant/storage \
+  qdrant/qdrant
+
 # 2. Start Backend
 echo "Building and Starting Backend..."
 docker build -t interview-backend ./backend
@@ -34,6 +43,7 @@ docker run -d \
   -v "$(pwd)/backend:/app" \
   -e PYTHONUNBUFFERED=1 \
   -e DATABASE_URL=postgresql://postgres:postgres@interview_db:5432/interview_agent \
+  -e QDRANT_URL=http://interview-qdrant:6333 \
   -e GOOGLE_CLIENT_ID=253400426353-2plko4sgdema9r1hj4c29hrmmreqe3qh.apps.googleusercontent.com \
   interview-backend
 
