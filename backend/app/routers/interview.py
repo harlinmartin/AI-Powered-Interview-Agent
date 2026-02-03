@@ -1,9 +1,12 @@
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, BackgroundTasks
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from .. import models, database
 from ..services import rag_service
 from .auth import get_current_user
 import json
+import datetime
+import os
 
 router = APIRouter(prefix="/interview", tags=["Interview"])
 
@@ -55,12 +58,15 @@ async def upload_interview_files(
     db: Session = Depends(database.get_db)
 ):
     try:
+        with open("/tmp/debug_upload.log", "a") as f:
+            f.write(f"\n[{datetime.datetime.now()}] START UPLOAD\n")
+            f.write(f"DB URL: {os.environ.get('DATABASE_URL')}\n")
+        
         print(f"INFO: POST /upload hit. File: {resume.filename}")
         if not (resume.filename.endswith(".pdf") or resume.filename.lower().endswith(('.png', '.jpg', '.jpeg'))):
             raise HTTPException(status_code=400, detail="Only PDF, PNG, JPG files allowed")
         
         # Create Interview ID immediately
-        import datetime
         new_interview = models.Interview(
             user_id=current_user.id,
             job_description=job_description,
@@ -70,7 +76,9 @@ async def upload_interview_files(
             created_at=datetime.datetime.now().isoformat()
         )
         db.add(new_interview)
+        with open("/tmp/debug_upload.log", "a") as f: f.write("Check: Before Commit\n")
         db.commit()
+        with open("/tmp/debug_upload.log", "a") as f: f.write("Check: After Commit\n")
         db.refresh(new_interview)
         
         # Read file content to memory
@@ -85,7 +93,6 @@ async def upload_interview_files(
         
     except Exception as e:
         import traceback
-        import datetime
         error_msg = f"\n[{datetime.datetime.now()}] UPLOAD ERROR:\n{traceback.format_exc()}\n"
         print(error_msg)
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
@@ -187,22 +194,15 @@ def generate_interview_feedback(
         print(f"Feedback Error: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate feedback")
 
-@router.post("/resume/optimize")
-async def optimize_resume(
-    resume: UploadFile = File(...),
-    job_description: str = Form(...),
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(database.get_db)
-):
+def _optimize_resume_sync(content: bytes, filename: str, job_description: str, db: Session, current_user: models.User):
     try:
-        content = await resume.read()
-        
+        print(f"DEBUG: Starting sync optimization for {filename}")
         # Extract Text
         resume_text = ""
-        if resume.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-            mime_type = "image/jpeg" if resume.filename.lower().endswith(('.jpg','.jpeg')) else "image/png"
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            mime_type = "image/jpeg" if filename.lower().endswith(('.jpg','.jpeg')) else "image/png"
             resume_text = llm_service.extract_text_from_image(content, mime_type)
-        elif resume.filename.endswith(".pdf"):
+        elif filename.endswith(".pdf"):
              # Use pypdf for text extraction
              import pypdf
              import io
@@ -213,13 +213,18 @@ async def optimize_resume(
              raise HTTPException(status_code=400, detail="Unsupported file format")
 
         if not resume_text or len(resume_text.strip()) < 50:
+             print("DEBUG: Resume text extraction failed or empty")
              return {"error": "Could not extract text from file"}
+        
+        print(f"DEBUG: Text extracted ({len(resume_text)} chars). Calling LLM...")
 
         # Optimize
         optimization_result = llm_service.optimize_resume_for_ats(resume_text, job_description)
         result_json = json.loads(optimization_result)
 
-        # PERSIST RESULT
+        if result_json.get("error"):
+             raise HTTPException(status_code=400, detail=result_json["error"])
+
         # PERSIST RESULT
         try:
             import datetime
@@ -242,33 +247,60 @@ async def optimize_resume(
                 suggestions=result_json.get("optimized_content", ""),
                 created_at=datetime.datetime.now().isoformat()
             )
+            # Create a NEW session for this thread since we can't easily reuse the one from async context safely if it was closed or race conditions
+            # actually we passed db session, but for thread safety let's be careful. 
+            # standard sqlalchemy session is not thread specific but not thread safe if shared. 
+            # However run_in_threadpool just runs it in a thread. 
+            # safer to use the passed db session if we are sure we await it properly? 
+            # actually, passed db session depends on request scope.
+            
             db.add(new_opt)
             db.commit()
+            print("DEBUG: Result saved to DB")
         except Exception as db_err:
             import traceback
             import datetime
             error_msg = f"\n[{datetime.datetime.now()}] DB SAVE ERROR:\n{str(db_err)}\nData: {str(result_json)}\n"
             print(error_msg)
-            try:
-                with open("backend_debug_error.log", "a") as f:
-                    f.write(error_msg)
-            except:
-                pass
-
+            
         return result_json
+
+    except Exception as e:
+        print(f"ERROR in _optimize_resume_sync: {e}")
+        import traceback
+        traceback.print_exc()
+        raise e
+
+@router.post("/resume/optimize")
+async def optimize_resume(
+    resume: UploadFile = File(...),
+    job_description: str = Form(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    try:
+        print(f"INFO: Received optimize request for {resume.filename}")
+        content = await resume.read()
+        
+        # Run blocking logic in threadpool
+        result = await run_in_threadpool(
+            _optimize_resume_sync, 
+            content=content, 
+            filename=resume.filename, 
+            job_description=job_description, 
+            db=db, 
+            current_user=current_user
+        )
+        
+        return result
 
     except Exception as e:
         import traceback
         import datetime
         error_msg = f"\n[{datetime.datetime.now()}] OPTIMIZE ERROR:\n{traceback.format_exc()}\n"
         print(error_msg)
-        try:
-            with open("backend_debug_error.log", "a") as f:
-                f.write(error_msg)
-        except:
-            pass
         print(f"Optimization Error: {e}")
-        raise HTTPException(status_code=500, detail="Resume optimization failed")
+        raise HTTPException(status_code=500, detail=f"Resume optimization failed: {str(e)}")
 
 @router.get("/resume/history")
 def get_resume_history(
@@ -359,9 +391,12 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
                 
                 print(f"DEBUG: Coding Trigger Check. Type: '{current_round}', History: {len(history)}")
 
-                if current_round == "Coding" and len(history) >= 2:
+                # Check if already triggered
+                has_coding_started = any("CODING PHASE" in m.content for m in history if m.role == "system")
+
+                if current_round == "Coding" and len(history) >= 4 and not has_coding_started:
                     should_trigger_coding = True
-                elif current_round == "Technical" and len(history) >= 20:
+                elif current_round == "Technical" and len(history) >= 20 and not has_coding_started:
                     should_trigger_coding = True
                 
                 if should_trigger_coding:

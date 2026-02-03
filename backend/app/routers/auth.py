@@ -122,18 +122,82 @@ def google_login(data: GoogleLoginData, db: Session = Depends(get_db)):
     except ValueError as e:
         raise HTTPException(status_code=401, detail="Invalid Google Token")
 
-class PasswordReset(BaseModel):
-    email: str
+from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
+from pydantic import EmailStr
+
+# Email Configuration
+conf = ConnectionConfig(
+    MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
+    MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
+    MAIL_FROM=os.getenv("MAIL_FROM"),
+    MAIL_PORT=int(os.getenv("MAIL_PORT", 587)),
+    MAIL_SERVER=os.getenv("MAIL_SERVER", "smtp.gmail.com"),
+    MAIL_STARTTLS=True,
+    MAIL_SSL_TLS=False,
+    USE_CREDENTIALS=True,
+    VALIDATE_CERTS=True
+)
+
+class ForgotPassword(BaseModel):
+    email: EmailStr
+
+class ResetPasswordSchema(BaseModel):
+    token: str
     new_password: str
 
 @router.post("/forgot-password")
-def forgot_password(reset_data: PasswordReset, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == reset_data.email).first()
+async def forgot_password(data: ForgotPassword, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == data.email).first()
     if not user:
-        # For security, standard practice is not to reveal if user exists, but for MVP we return 404 or success
-        raise HTTPException(status_code=404, detail="Email not found")
+        # Don't reveal valid emails
+        return {"message": "If the email exists, a reset link has been sent."}
     
-    hashed_password = get_password_hash(reset_data.new_password)
-    user.hashed_password = hashed_password
-    db.commit()
-    return {"message": "Password updated successfully"}
+    # Generate Reset Token (15 mins)
+    expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode = {"sub": user.email, "type": "reset", "exp": expire}
+    reset_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    
+    # Send Email
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    reset_link = f"{frontend_url}/reset-password?token={reset_token}"
+    
+    message = MessageSchema(
+        subject="Password Reset Request",
+        recipients=[data.email],
+        body=f"""
+        <h3>Password Reset</h3>
+        <p>Click the link below to reset your password. This link expires in 15 minutes.</p>
+        <a href="{reset_link}">Reset Password</a>
+        <br>
+        <p>If you did not request this, please ignore this email.</p>
+        """,
+        subtype=MessageType.html
+    )
+    
+    fm = FastMail(conf)
+    await fm.send_message(message)
+    
+    return {"message": "Reset link sent"}
+
+@router.post("/reset-password")
+def reset_password(data: ResetPasswordSchema, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(data.token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        token_type = payload.get("type")
+        
+        if email is None or token_type != "reset":
+            raise HTTPException(status_code=400, detail="Invalid token")
+            
+        user = db.query(models.User).filter(models.User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        # Update Password
+        user.hashed_password = get_password_hash(data.new_password)
+        db.commit()
+        
+        return {"message": "Password updated successfully"}
+        
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
