@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
+import { ResetPassword } from './pages/ResetPassword';
 import { useAuthStore } from './store/useAuthStore';
 import 'regenerator-runtime/runtime';
 import { InterviewRoom } from './pages/InterviewRoom';
@@ -21,6 +22,7 @@ function App() {
         <Router>
             <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route
                     path="/dashboard"
                     element={
