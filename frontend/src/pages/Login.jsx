@@ -34,13 +34,12 @@ export const Login = () => {
                 await login(email, password);
                 navigate('/dashboard');
             } else if (view === 'forgot') {
-                await resetPassword(email, newPassword);
-                setSuccessMsg('Password reset successfully! You can now login.');
+                await resetPassword(email);
+                setSuccessMsg('Reset link sent! Please check your email.');
                 setTimeout(() => {
                     setView('login');
                     setSuccessMsg('');
-                    setPassword('');
-                }, 2000);
+                }, 5000);
             }
         } catch (err) {
             console.error("Auth Error:", err);
@@ -138,15 +137,7 @@ export const Login = () => {
 
                     {view === 'forgot' && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                            <input
-                                type="password"
-                                required
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="New Password"
-                            />
+
                         </div>
                     )}
 
@@ -167,7 +158,7 @@ export const Login = () => {
                         disabled={isLoading}
                         className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
                     >
-                        {isLoading ? 'Loading...' : (view === 'login' ? 'Sign In' : view === 'register' ? 'Sign Up' : 'Reset Password')}
+                        {isLoading ? 'Loading...' : (view === 'login' ? 'Sign In' : view === 'register' ? 'Sign Up' : 'Send Reset Link')}
                     </button>
                 </form>
 

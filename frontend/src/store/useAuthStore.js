@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const useAuthStore = create((set) => ({
     token: localStorage.getItem('token'),
@@ -34,8 +34,11 @@ export const useAuthStore = create((set) => ({
         localStorage.setItem('user', JSON.stringify(userObj));
         set({ token: accessToken, user: userObj });
     },
-    resetPassword: async (email, newPassword) => {
-        await axios.post(`${API_URL}/forgot-password`, { email, new_password: newPassword });
+    resetPassword: async (email) => {
+        await axios.post(`${API_URL}/forgot-password`, { email });
+    },
+    confirmPasswordReset: async (token, newPassword) => {
+        await axios.post(`${API_URL}/reset-password`, { token, new_password: newPassword });
     },
     logout: () => {
         localStorage.removeItem('token');
