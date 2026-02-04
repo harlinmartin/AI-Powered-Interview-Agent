@@ -399,8 +399,10 @@ export const Dashboard = () => {
                             <div className="space-y-4">
                                 {interviews.filter(inv => {
                                     if (!selectedDate) return true;
-                                    const invDate = new Date(inv.created_at || inv.date).toISOString().split('T')[0];
-                                    return invDate === selectedDate;
+                                    // Fix: Use local time for date comparison to avoid timezone issues
+                                    const d = new Date(inv.created_at || inv.date);
+                                    const localDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                                    return localDate === selectedDate;
                                 }).map((inv) => {
                                     const feedback = inv.feedback_result ? JSON.parse(inv.feedback_result) : {};
                                     const score = feedback.score || 0;
@@ -487,11 +489,16 @@ export const Dashboard = () => {
                                         </div>
                                     );
                                 })}
-                                {interviews.filter(inv => !selectedDate || new Date(inv.created_at).toISOString().split('T')[0] === selectedDate).length === 0 && (
-                                    <p className="text-slate-500 mt-2 text-center py-8">
-                                        {selectedDate ? `No sessions found for ${selectedDate}` : 'No history available.'}
-                                    </p>
-                                )}
+                                {interviews.filter(inv => {
+                                    if (!selectedDate) return true;
+                                    const d = new Date(inv.created_at || inv.date);
+                                    const localDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                                    return localDate === selectedDate;
+                                }).length === 0 && (
+                                        <p className="text-slate-500 mt-2 text-center py-8">
+                                            {selectedDate ? `No sessions found for ${selectedDate}` : 'No history available.'}
+                                        </p>
+                                    )}
                             </div>
                         </div>
                     )}

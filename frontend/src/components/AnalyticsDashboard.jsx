@@ -60,7 +60,7 @@ export const AnalyticsDashboard = () => {
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl relative overflow-hidden group hover:border-blue-500/30 hover:shadow-md transition shadow-sm">
-                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <div className="absolute right-0 top-0 p-4 opacity-20 group-hover:opacity-30 transition">
                         <TrendingUp size={60} className="text-blue-500" />
                     </div>
                     <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Average Score</div>
@@ -71,7 +71,7 @@ export const AnalyticsDashboard = () => {
                 </div>
 
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl relative overflow-hidden group hover:border-purple-500/30 hover:shadow-md transition shadow-sm">
-                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <div className="absolute right-0 top-0 p-4 opacity-20 group-hover:opacity-30 transition">
                         <Award size={60} className="text-purple-500" />
                     </div>
                     <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Strongest Skill</div>
@@ -82,7 +82,7 @@ export const AnalyticsDashboard = () => {
                 </div>
 
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl relative overflow-hidden group hover:border-emerald-500/30 hover:shadow-md transition shadow-sm">
-                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <div className="absolute right-0 top-0 p-4 opacity-20 group-hover:opacity-30 transition">
                         <BarChart2 size={60} className="text-emerald-500" />
                     </div>
                     <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Total Sessions</div>
@@ -152,8 +152,8 @@ export const AnalyticsDashboard = () => {
                     <div className="h-[300px] w-full flex items-center justify-center">
                         <ResponsiveContainer width="100%" height="100%">
                             <RadarChart cx="50%" cy="50%" outerRadius="80%" data={skill_radar}>
-                                <PolarGrid stroke="#cbd5e1" />
-                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 12, fontWeight: 500 }} />
+                                <PolarGrid stroke="#94a3b8" />
+                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#0f172a', fontSize: 12, fontWeight: 600 }} />
                                 <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                                 <Radar
                                     name="Skills"
