@@ -377,12 +377,12 @@ export const InterviewRoom = () => {
             }
         };
 
-        // Trigger 1: If listening stopped (browser detected end of speech), send IMMEDIATELY
-        if (!useDeepgram && !listening) {
-            console.log("Speech stopped - sending immediately");
-            sendTranscript();
-            return;
-        }
+        // Trigger 1: DISABLED - Was too aggressive, interrupted users mid-speech
+        // if (!useDeepgram && !listening) {
+        //     console.log("Speech stopped - sending immediately");
+        //     sendTranscript();
+        //     return;
+        // }
 
         // Trigger 2: Silence Timer (Debounce) - if user pauses for 6s while still "listening"
         const handler = setTimeout(() => {

@@ -36,7 +36,7 @@ async def websocket_audio_endpoint(websocket: WebSocket, interview_id: int):
             "language=en-US&"
             "smart_format=true&"
             "interim_results=true&"
-            "utterance_end_ms=1200&"
+            "utterance_end_ms=6000&"
             "vad_events=true"
         )
         
