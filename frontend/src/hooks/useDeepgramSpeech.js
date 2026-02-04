@@ -54,7 +54,7 @@ export const useDeepgramSpeech = (interviewId, isListening, onTranscript, onErro
                     console.log('✅ Deepgram WebSocket connected');
                     setIsConnected(true);
 
-                    // Start recording and streaming audio
+                    // Start recording and streaming audio AFTER connection is open
                     const mediaRecorder = new MediaRecorder(stream, {
                         mimeType: 'audio/webm',
                     });
@@ -62,12 +62,13 @@ export const useDeepgramSpeech = (interviewId, isListening, onTranscript, onErro
 
                     mediaRecorder.ondataavailable = (event) => {
                         if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                            // Send audio chunk to backend
+                            // Send audio chunk to backend only if connection is open
                             ws.send(event.data);
                         }
                     };
 
-                    mediaRecorder.start(250); // Send chunks every 250ms
+                    // Start recording with 250ms chunks
+                    mediaRecorder.start(250);
                     console.log('🎤 Recording started');
                 };
 
