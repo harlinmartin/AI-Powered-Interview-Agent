@@ -104,7 +104,10 @@ export const useDeepgramSpeech = (interviewId, isListening, onTranscript, onErro
                 mediaRecorderRef.current.stop();
             }
             if (wsRef.current) {
-                wsRef.current.send(JSON.stringify({ type: 'stop' }));
+                // Only send stop message if connection is open
+                if (wsRef.current.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({ type: 'stop' }));
+                }
                 wsRef.current.close();
             }
             if (streamRef.current) {
