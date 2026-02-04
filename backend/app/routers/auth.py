@@ -154,6 +154,7 @@ async def forgot_password(data: ForgotPassword, db: Session = Depends(get_db)):
     
     # Send Email via Brevo
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    print(f"DEBUG: Generated reset token: {reset_token}")
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     
     brevo_api_key = os.getenv("BREVO_API_KEY")
@@ -195,8 +196,10 @@ async def forgot_password(data: ForgotPassword, db: Session = Depends(get_db)):
         return {"message": "Failed to send email. Please try again later."}
 
 @router.post("/reset-password")
-def reset_password(data: ResetPasswordSchema, db: Session = Depends(get_db)):
     try:
+        # Sanitize token (remove trailing dots often added by email clients)
+        data.token = data.token.strip().rstrip('.')
+        
         payload = jwt.decode(data.token, SECRET_KEY, algorithms=[ALGORITHM])
         email = payload.get("sub")
         token_type = payload.get("type")

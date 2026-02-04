@@ -5,7 +5,8 @@ import { KeyRound, ArrowRight } from 'lucide-react';
 
 export const ResetPassword = () => {
     const [searchParams] = useSearchParams();
-    const token = searchParams.get('token');
+    // Sanitize token (remove trailing dots often added by email clients)
+    const token = searchParams.get('token')?.trim().replace(/\.$/, '');
     const navigate = useNavigate();
     const { confirmPasswordReset } = useAuthStore();
 
