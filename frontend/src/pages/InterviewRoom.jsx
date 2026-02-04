@@ -320,26 +320,40 @@ export const InterviewRoom = () => {
         };
     }, [browserSupportsSpeechRecognition, started, aiSpeaking, isMuted]);
 
-    // 9. Transcript Sender (Fixed)
+    // 9. Transcript Sender (Fixed & Robust)
     useEffect(() => {
-        if (!transcript || transcript.trim().length < 3) return;
-        if (aiSpeaking || !listening) return;
+        // BasicValidation
+        if (!transcript || transcript.trim().length < 2) return;
+        if (aiSpeaking) return;
 
-        const handler = setTimeout(() => {
+        const sendTranscript = () => {
             if (wsRef.current?.readyState === WebSocket.OPEN) {
                 console.log('📤 Sending transcript:', transcript);
                 setAiThinking(true);
                 wsRef.current.send(JSON.stringify({
                     type: 'user_audio_text',
                     content: transcript,
-                    last_question: lastQuestion  // Send for validation
+                    last_question: lastQuestion
                 }));
                 resetTranscript();
             }
-        }, 1500); // Reduced to 1.5s for better responsiveness
+        };
+
+        // Trigger 1: If listening stopped (browser detected end of speech), send IMMEDIATELY
+        if (!listening) {
+            console.log("Speech stopped - sending immediately");
+            sendTranscript();
+            return;
+        }
+
+        // Trigger 2: Silence Timer (Debounce) - if user pauses for 1s while still "listening"
+        const handler = setTimeout(() => {
+            console.log("Silence detected - sending");
+            sendTranscript();
+        }, 1000);
 
         return () => clearTimeout(handler);
-    }, [transcript, aiSpeaking, listening, resetTranscript]);
+    }, [transcript, aiSpeaking, listening, resetTranscript, lastQuestion]);
 
     // 10. Microphone Test Function
     const testMicrophone = async () => {
