@@ -9,9 +9,11 @@ import io
 # Local Qdrant (Disk persistence)
 # Local Qdrant (Disk persistence) or Server
 qdrant_url = os.getenv("QDRANT_URL")
+qdrant_key = os.getenv("QDRANT_API_KEY")
+
 if qdrant_url:
     print(f"INFO: Connecting to Qdrant at {qdrant_url}")
-    client = QdrantClient(url=qdrant_url)
+    client = QdrantClient(url=qdrant_url, api_key=qdrant_key)
 else:
     print("INFO: Using local Qdrant (disk)")
     client = QdrantClient(path="qdrant_db")
