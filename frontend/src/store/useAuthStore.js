@@ -23,8 +23,8 @@ export const useAuthStore = create((set) => ({
         localStorage.setItem('user', JSON.stringify(userObj));
         set({ token, user: userObj });
     },
-    register: async (email, password) => {
-        await axios.post(`${API_URL}/register`, { email, password });
+    register: async (email, password, name) => {
+        await axios.post(`${API_URL}/register`, { email, password, full_name: name });
     },
     googleLogin: async (token, email, name) => {
         const response = await axios.post(`${API_URL}/google-login`, { token });

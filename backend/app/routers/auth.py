@@ -63,7 +63,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     hashed_password = get_password_hash(user.password)
-    new_user = models.User(email=user.email, hashed_password=hashed_password)
+    new_user = models.User(email=user.email, full_name=user.full_name, hashed_password=hashed_password)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -92,7 +92,13 @@ def google_login(data: GoogleLoginData, db: Session = Depends(get_db)):
     try:
         # Verify the token with Google
         CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-        id_info = id_token.verify_oauth2_token(data.token, requests.Request(), CLIENT_ID)
+        # Add clock skew tolerance (e.g. 5 minutes) to handle Docker/Host time drift
+        id_info = id_token.verify_oauth2_token(
+            data.token, 
+            requests.Request(), 
+            CLIENT_ID,
+            clock_skew_in_seconds=300
+        )
 
         email = id_info['email']
         name = id_info.get('name', '')
@@ -120,7 +126,8 @@ def google_login(data: GoogleLoginData, db: Session = Depends(get_db)):
         return {"access_token": access_token, "token_type": "bearer"}
         
     except ValueError as e:
-        raise HTTPException(status_code=401, detail="Invalid Google Token")
+        print(f"GOOGLE LOGIN ERROR: {e}")  # Print specific error to logs
+        raise HTTPException(status_code=401, detail=f"Invalid Google Token: {str(e)}")
 
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from pydantic import EmailStr

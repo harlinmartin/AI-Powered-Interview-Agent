@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, Mail, ArrowRight, CheckCircle2, Sparkles, Globe2 } from 'lucide-react';
+import { KeyRound, Mail, ArrowRight, CheckCircle2, Sparkles, Globe2, User } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from "jwt-decode";
 
@@ -9,6 +9,8 @@ export const Login = () => {
     const [view, setView] = useState('login'); // 'login', 'register', 'forgot'
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [name, setName] = useState('');
     const [newPassword, setNewPassword] = useState(''); // For reset
     const [isLoading, setIsLoading] = useState(false);
     const { login, register, resetPassword, googleLogin } = useAuthStore();
@@ -29,7 +31,19 @@ export const Login = () => {
                 await login(email, password);
                 navigate('/dashboard');
             } else if (view === 'register') {
-                await register(email, password);
+                // Password Validation
+                const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
+                if (!passwordRegex.test(password)) {
+                    setError('Password must be at least 8 characters, contain 1 uppercase letter, and 1 number.');
+                    setIsLoading(false);
+                    return;
+                }
+                if (password !== confirmPassword) {
+                    setError('Passwords do not match');
+                    setIsLoading(false);
+                    return;
+                }
+                await register(email, password, name);
                 alert('Account created! Logging you in...');
                 await login(email, password);
                 navigate('/dashboard');
@@ -51,33 +65,42 @@ export const Login = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-            <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-                <div className="text-center mb-8">
-                    <h2 className="text-2xl font-bold text-gray-800">
-                        {view === 'login' ? 'Welcome Back' : view === 'register' ? 'Create Account' : 'Reset Password'}
+        <div className="min-h-screen bg-theme-bg flex items-center justify-center p-4 relative overflow-hidden">
+            {/* Background Decoration */}
+            <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-100/50 rounded-full blur-3xl -mr-32 -mt-32"></div>
+                <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-100/50 rounded-full blur-3xl -ml-32 -mb-32"></div>
+            </div>
+
+            <div className="max-w-md w-full bg-theme-surface rounded-[2.5rem] shadow-soft border border-white/60 p-8 md:p-10 relative z-10 animate-fade-in-up">
+                <div className="text-center mb-10">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-500/30 mb-6 transform rotate-3 hover:rotate-6 transition-transform">
+                        <KeyRound size={32} />
+                    </div>
+                    <h2 className="text-3xl font-bold text-slate-800 tracking-tight">
+                        {view === 'login' ? 'Welcome Back' : view === 'register' ? 'Join ElevateAI' : 'Reset Password'}
                     </h2>
-                    <p className="text-gray-600 mt-2">
-                        {view === 'login' ? 'Please sign in to continue' : view === 'register' ? 'Sign up to get started' : 'Enter your email to reset password'}
+                    <p className="text-slate-500 mt-2 font-medium">
+                        {view === 'login' ? 'Sign in to access your interview dashboard' : view === 'register' ? 'Start your journey to interview success' : 'Enter your email to recover your account'}
                     </p>
                 </div>
 
                 {error && (
-                    <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">
-                        {error}
+                    <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl mb-6 text-sm flex items-center gap-2 animate-fade-in">
+                        <CheckCircle2 size={16} className="rotate-45" /> {error}
                     </div>
                 )}
 
                 {successMsg && (
-                    <div className="bg-green-50 text-green-600 p-3 rounded mb-4 text-sm">
-                        {successMsg}
+                    <div className="bg-emerald-50 border border-emerald-100 text-emerald-600 p-4 rounded-xl mb-6 text-sm flex items-center gap-2 animate-fade-in">
+                        <CheckCircle2 size={16} /> {successMsg}
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-5">
                     {view === 'login' && (
-                        <div className="mb-6">
-                            <div className="flex justify-center w-full mb-4">
+                        <div className="mb-8">
+                            <div className="flex justify-center w-full mb-6">
                                 <GoogleLogin
                                     onSuccess={async (credentialResponse) => {
                                         try {
@@ -95,49 +118,82 @@ export const Login = () => {
                                         setError("Google Login Failed");
                                     }}
                                     useOneTap
+                                    theme="filled_blue"
+                                    shape="pill"
+                                    size="large"
+                                    text="continue_with"
                                     width="100%"
                                 />
                             </div>
 
-                            <div className="relative my-6">
+                            <div className="relative my-8">
                                 <div className="absolute inset-0 flex items-center">
-                                    <div className="w-full border-t border-gray-200"></div>
+                                    <div className="w-full border-t border-slate-200"></div>
                                 </div>
                                 <div className="relative flex justify-center text-sm">
-                                    <span className="px-2 bg-white text-gray-500">Or continue with email</span>
+                                    <span className="px-4 bg-white text-slate-400 font-medium">Or continue with email</span>
                                 </div>
                             </div>
                         </div>
                     )}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                        <input
-                            type="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="name@company.com"
-                        />
+
+                    {view === 'register' && (
+                        <div className="space-y-1">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Full Name</label>
+                            <div className="relative">
+                                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input
+                                    type="text"
+                                    required
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all font-medium text-slate-800 placeholder-slate-400"
+                                    placeholder="John Doe"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="space-y-1">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Email Address</label>
+                        <div className="relative">
+                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input
+                                type="email"
+                                required
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all font-medium text-slate-800 placeholder-slate-400"
+                                placeholder="name@company.com"
+                            />
+                        </div>
                     </div>
 
                     {view !== 'forgot' && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                        <div className="space-y-1">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Password</label>
                             <input
                                 type="password"
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all font-medium text-slate-800 placeholder-slate-400"
                                 placeholder="••••••••"
                             />
                         </div>
                     )}
 
-                    {view === 'forgot' && (
-                        <div>
-
+                    {view === 'register' && (
+                        <div className="space-y-1">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Confirm Password</label>
+                            <input
+                                type="password"
+                                required
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all font-medium text-slate-800 placeholder-slate-400"
+                                placeholder="••••••••"
+                            />
                         </div>
                     )}
 
@@ -146,7 +202,7 @@ export const Login = () => {
                             <button
                                 type="button"
                                 onClick={() => setView('forgot')}
-                                className="text-sm text-blue-600 hover:underline"
+                                className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
                             >
                                 Forgot Password?
                             </button>
@@ -156,19 +212,23 @@ export const Login = () => {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl shadow-lg shadow-blue-500/30 transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg flex items-center justify-center gap-2"
                     >
-                        {isLoading ? 'Loading...' : (view === 'login' ? 'Sign In' : view === 'register' ? 'Sign Up' : 'Send Reset Link')}
+                        {isLoading ? <Sparkles className="animate-spin" /> : <ArrowRight />}
+                        {isLoading ? 'Processing...' : (view === 'login' ? 'Sign In' : view === 'register' ? 'Create Account' : 'Send Reset Link')}
                     </button>
                 </form>
 
-                <div className="mt-6 text-center text-sm">
+                <div className="mt-8 text-center">
                     {view === 'login' ? (
-                        <button onClick={() => setView('register')} className="text-blue-600 hover:underline">
-                            Don't have an account? Sign up
-                        </button>
+                        <p className="text-slate-500 text-sm">
+                            Don't have an account?{' '}
+                            <button onClick={() => setView('register')} className="text-blue-600 font-bold hover:underline">
+                                Sign up free
+                            </button>
+                        </p>
                     ) : (
-                        <button onClick={() => setView('login')} className="text-blue-600 hover:underline">
+                        <button onClick={() => setView('login')} className="text-slate-500 font-bold hover:text-slate-800 text-sm flex items-center justify-center gap-2 w-full">
                             Back to Sign In
                         </button>
                     )}
