@@ -38,3 +38,6 @@ qdrant_db/
 qdrant_storage/
 data/
 *.pdf
+
+# Secrets/Tests
+backend/test_qdrant_user_creds.py
