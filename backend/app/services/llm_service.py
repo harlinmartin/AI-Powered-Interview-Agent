@@ -437,7 +437,7 @@ Responsibilities include tasks typical for {role_name} positions."""
         if not self.client:
              return '{"ats_score": 0, "optimized_content": "Mock Optimized Text", "missing_keywords": ["Python"], "formatting_issues": ["Use standard font"]}'
 
-        system_prompt = """You are a Strict ATS (Applicant Tracking System) Algorithm.
+        system_prompt = """You are a RUTHLESS ATS (Applicant Tracking System) Algorithm designed by FAANG recruiters.
         
         JOB DESCRIPTION:
         {job_description}
@@ -463,33 +463,30 @@ Responsibilities include tasks typical for {role_name} positions."""
            **DO NOT PROCEED TO SCORING IF JD IS INVALID OR NON-TECH.**
 
         2. **VALIDATION (RESUME)**: determine if the provided RESUME TEXT is actually a resume or CV.
-
-        2. **VALIDATION (RESUME)**: determine if the provided RESUME TEXT is actually a resume or CV.
            - If it is a recipe, code file, book chapter, random text, or irrelevant document:
              Output JSON with: {{ "error": "The uploaded file does not appear to be a valid resume. It seems to be [brief description of what it is]." }}
              AND STOP.
 
-        3. **STRICT ROLE MATCH CHECK (CRITICAL)**:
-           - Identify the Candidate's PRIMARY ROLE based on their *most recent* experience (e.g., "Frontend Developer", "Data Analyst", "Marketing Manager").
-           - Compare it to the TARGET ROLE in the Job Description.
-           - **MISMATCH RULE**: If the roles are fundamentally different (e.g., "Nurse" applying for "Data Scientist", "Sales" applying for "Python Dev", or "Frontend Dev" applying for "Data Engineer"), **THE SCORE MUST NOT EXCEED 40**.
-           - **Even if they have some keywords, if the core experience is wrong, they fail.**
+        3. **RUTHLESS SCORING CRITERIA (0-100)**:
+           - **95-100 (Unicorn)**: 100% Keyword match, identical Tech Stack, FAANG-level experience, quantifiably high impact. (EXTREMELY RARE).
+           - **85-94 (Top Tier)**: Excellent match, maybe missing 1 minor tool. Strong bullets.
+           - **70-84 (Good)**: Solid candidate, but generic bullets or missing 2-3 important keywords from JD.
+           - **50-69 (Average)**: Weak formatting, missing CORE hard skills (e.g., JD wants React, they have jQuery), or no metrics in bullets.
+           - **< 40 (Auto-Reject)**: 
+             1. **Role Mismatch** (e.g., Sales applying for Python Dev) -> **MAX SCORE 25**.
+             2. **Missing Critical Stack** (e.g., JD requires AWS, Resume has 0 Cloud exp).
+             3. **Garbage/Empty Resume**.
 
-        3. **CALCULATE ATS SCORE (0-100)**:
-           - **90-100**: Perfect match. All critical skills + relevant experience + correct role.
-           - **70-89**: Good match. Correct role, missing 1-2 minor skills.
-           - **50-69**: Weak match. Correct role but missing critical tech stack (e.g., JD wants React, they only know Vue).
-           - **< 40**: **FAIL**. usage of this score is MANDATORY if:
-             1. The candidate lacks the CORE TECH STACK (e.g. DevOps role but NO Docker/Kubernetes/CI-CD experience).
-             2. Role mismatch (e.g. Sales applying for Dev).
-             3. Resume is unrelated to the JD.
+        4. **SCORING LOGIC**:
+           - **Start at 100.**
+           - **-10 points** for EACH missing "Hard Skill" required in the JD.
+           - **-15 points** if Bullet points lack numbers/metrics (e.g., "Worked on API" vs "Built API handling 10k req/s").
+           - **-20 points** if formatting/structure is cluttered or hard to parse.
+           - **-50 points** if the Resume Role does not match the JD Role (e.g., Java Dev applying for Frontend).
 
-        4. **IDENTIFY GAPS**: Missing critical keywords.
-        5. **ROLE-SPECIFIC ADVICE**:
-           - **Projects to Highlight**: Suggest 1-2 specific projects the candidate should describe to match this specific role.
-           - **Weak Bullets**: Quote 1 specific weak bullet point from the resume and rewrite it to be impact-driven (X-Y-Z formula).
-
-        6. **REWRITE**: improved "Summary" and "Skills".
+        5. **OUTPUT**:
+           - **missing_keywords**: List EXACT words from JD not found in Resume.
+           - **formatting_issues**: Be nitpicky (e.g., "Inconsistent timestamps", "Too much text", "Lack of action verbs").
 
         Output ONLY valid JSON:
         {{
@@ -497,7 +494,7 @@ Responsibilities include tasks typical for {role_name} positions."""
             "ats_score": <int>,
             "missing_keywords": ["list", "of", "keywords"],
             "formatting_issues": ["list", "of", "issues"],
-            "optimized_content": "Markdown string containing:\n\n### Role Analysis\n(Explicitly state: 'Role Mismatch detected' or 'Role Alignment confirmed'. Explain why.)\n\n### Project Recommendations\n(Specific advice on what to highlight)\n\n### Bullet Point Critique\n**Weak:** (Quote)\n**Better:** (Rewrite)\n\n### Optimized Summary\n(Text)\n\n### Optimized Skills\n(Text)"
+            "optimized_content": "Markdown string containing:\n\n### Role Analysis\n(Explicitly state: 'Role Mismatch detected' or 'Role Alignment confirmed'. Explain why.)\n\n### Project Recommendations\n(Specific advice on what to highlight)\n\n### Bullet Point Critique\n**Weak:** (Quote)\n**Why it hurts:** (Explanation)\n**Better:** (Rewrite with metrics)\n\n### Optimized Summary\n(Text)\n\n### Optimized Skills\n(Text)"
         }}
         """
         
