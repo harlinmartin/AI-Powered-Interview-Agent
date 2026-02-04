@@ -12,6 +12,7 @@ export const ResumeOptimizer = () => {
     const [file, setFile] = useState(null);
     const [jobDesc, setJobDesc] = useState('');
     const [loading, setLoading] = useState(false);
+    const [loadingStage, setLoadingStage] = useState('');
     const [result, setResult] = useState(null);
     const [history, setHistory] = useState([]);
 
@@ -43,6 +44,8 @@ export const ResumeOptimizer = () => {
     const handleOptimize = async () => {
         if (!file || !jobDesc) return;
         setLoading(true);
+        setLoadingStage('Extracting text from resume...');
+
         try {
             const formData = new FormData();
             formData.append('resume', file);
@@ -50,6 +53,11 @@ export const ResumeOptimizer = () => {
 
             const token = useAuthStore.getState().token;
             const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+            // Simulate progress stages
+            setTimeout(() => setLoadingStage('Analyzing with AI...'), 1500);
+            setTimeout(() => setLoadingStage('Generating optimization report...'), 8000);
+
             const response = await axios.post(`${API_URL}/interview/resume/optimize`, formData, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -74,6 +82,7 @@ export const ResumeOptimizer = () => {
             }
         } finally {
             setLoading(false);
+            setLoadingStage('');
         }
     };
 
@@ -243,7 +252,7 @@ export const ResumeOptimizer = () => {
                                 className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${loading || !file || !jobDesc ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg hover:shadow-blue-500/25'}`}
                             >
                                 {loading ? <RefreshCw className="animate-spin" /> : <RefreshCw />}
-                                {loading ? "Optimizing..." : "Run ATS Scan"}
+                                {loading ? (loadingStage || "Optimizing...") : "Run ATS Scan"}
                             </button>
                         </div>
 
