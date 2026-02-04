@@ -384,11 +384,11 @@ export const InterviewRoom = () => {
             return;
         }
 
-        // Trigger 2: Silence Timer (Debounce) - if user pauses for 1.5s while still "listening"
+        // Trigger 2: Silence Timer (Debounce) - if user pauses for 6s while still "listening"
         const handler = setTimeout(() => {
             console.log("Silence detected - sending");
             sendTranscript();
-        }, 1500);
+        }, 6000);
 
         return () => clearTimeout(handler);
     }, [transcript, deepgramTranscript, useDeepgram, aiSpeaking, listening, resetTranscript, lastQuestion]);
