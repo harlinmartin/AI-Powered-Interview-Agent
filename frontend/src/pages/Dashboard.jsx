@@ -130,6 +130,14 @@ export const Dashboard = () => {
         }
     }, [interviews]);
 
+    // Auto-refresh analytics when switching to analytics tab
+    useEffect(() => {
+        if (currentTab === 'analytics') {
+            console.log('📊 Analytics tab opened - refreshing data...');
+            fetchInterviews(); // Refresh interview list
+        }
+    }, [currentTab, fetchInterviews]);
+
     const handleStartInterview = async (file, compositeJD, roundType, difficulty) => {
         setLoading(true);
         try {
@@ -138,7 +146,11 @@ export const Dashboard = () => {
             navigate(`/interview/${id}`);
         } catch (err) {
             console.error(err);
-            toastError("Upload failed.");
+            const errorMsg = err.response?.data?.detail || "Upload failed. Please check your file.";
+            // Remove technical prefixes if present to make it cleaner for user
+            const cleanMsg = errorMsg.replace(/^(400: )/, '').replace(/Internal Server Error: /, '');
+            toastError(cleanMsg);
+            throw err; // Re-throw so the modal knows to stay open
         } finally {
             setLoading(false);
         }
@@ -149,32 +161,49 @@ export const Dashboard = () => {
     // Simple navigation handler
     const handleNav = (tab) => setCurrentTab(tab);
 
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+    const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
     return (
-        <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans">
+        <div className="flex min-h-screen bg-transparent text-slate-900 font-sans relative">
+            {/* Mobile Overlay */}
+            {isSidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-20 md:hidden backdrop-blur-sm"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+
             {/* Sidebar Navigation */}
-            <aside className="w-64 bg-white border-r border-slate-200 flex flex-col fixed h-full z-20 shadow-sm">
-                <div className="h-16 flex items-center px-6 border-b border-slate-200 gap-3">
-                    <div className="bg-blue-600 text-white p-1.5 rounded-lg shadow-sm">
-                        <Briefcase size={20} />
+            <aside className={`w-64 bg-theme-surface flex flex-col fixed h-full z-30 shadow-soft transition-transform duration-300 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                <div className="h-20 flex items-center justify-between px-8 gap-3">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-blue-600 text-white p-2 rounded-2xl shadow-lg shadow-blue-500/30">
+                            <Briefcase size={22} />
+                        </div>
+                        <span className="font-bold text-xl tracking-tight text-slate-800">ElevateAI</span>
                     </div>
-                    <span className="font-bold text-xl tracking-tight text-slate-800">ElevateAI</span>
+                    <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-500 hover:text-slate-800">
+                        <ChevronRight size={20} className="rotate-180" />
+                    </button>
                 </div>
 
-                <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                    <button onClick={() => handleNav('home')} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${currentTab === 'home' ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-200' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-                        <Home size={18} />
+                <nav className="flex-1 px-4 space-y-2 overflow-y-auto">
+                    <button onClick={() => { handleNav('home'); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 text-sm font-bold rounded-3xl transition-all ${currentTab === 'home' ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
+                        <Home size={20} />
                         Overview
                     </button>
-                    <button onClick={() => handleNav('history')} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${currentTab === 'history' ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-200' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-                        <Clock size={18} />
+                    <button onClick={() => { handleNav('history'); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 text-sm font-bold rounded-3xl transition-all ${currentTab === 'history' ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
+                        <Clock size={20} />
                         History
                     </button>
-                    <button onClick={() => handleNav('analytics')} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${currentTab === 'analytics' ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-200' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-                        <BarChart3 size={18} />
+                    <button onClick={() => { handleNav('analytics'); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 text-sm font-bold rounded-3xl transition-all ${currentTab === 'analytics' ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
+                        <BarChart3 size={20} />
                         Analytics
                     </button>
-                    <button onClick={() => handleNav('optimizer')} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${currentTab === 'optimizer' ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-200' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-                        <FileSearch size={18} />
+                    <button onClick={() => { handleNav('optimizer'); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 text-sm font-bold rounded-3xl transition-all ${currentTab === 'optimizer' ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
+                        <FileSearch size={20} />
                         Resume Optimization
                     </button>
                 </nav>
@@ -197,22 +226,27 @@ export const Dashboard = () => {
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 ml-64">
+            <main className="flex-1 md:ml-64 min-w-0">
                 {/* Header Banner */}
-                <div className="bg-white border-b border-slate-200 px-8 py-6 mb-8 flex items-center justify-between sticky top-0 z-10 glass-card bg-white/90">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-                            {currentTab === 'home' && `Welcome back, ${profileName}`}
-                            {currentTab === 'history' && 'Interview History'}
-                            {currentTab === 'analytics' && 'Performance Analytics'}
-                            {currentTab === 'optimizer' && 'Resume Optimizer'}
-                        </h1>
-                        <p className="text-slate-500 text-sm mt-1">
-                            {currentTab === 'home' && 'Here’s what’s happening with your preparation today.'}
-                            {currentTab === 'history' && 'Review your past sessions and feedback.'}
-                            {currentTab === 'analytics' && 'Track your progress and identify areas for improvement.'}
-                            {currentTab === 'optimizer' && 'Optimize your resume for specific job descriptions.'}
-                        </p>
+                <div className="bg-white border-b border-slate-200 px-4 md:px-8 py-4 md:py-6 mb-8 flex items-center justify-between sticky top-0 z-10 glass-card bg-white/90">
+                    <div className="flex items-center gap-3">
+                        <button onClick={toggleSidebar} className="p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg md:hidden">
+                            <MoreHorizontal size={24} className="rotate-90" />
+                        </button>
+                        <div>
+                            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+                                {currentTab === 'home' && (interviews.length > 0 ? `Welcome back, ${profileName}` : `Welcome to ElevateAI, ${profileName}!`)}
+                                {currentTab === 'history' && 'Interview History'}
+                                {currentTab === 'analytics' && 'Performance Analytics'}
+                                {currentTab === 'optimizer' && 'Resume Optimizer'}
+                            </h1>
+                            <p className="text-slate-500 text-sm mt-1">
+                                {currentTab === 'home' && (interviews.length > 0 ? 'Here’s what’s happening with your preparation today.' : 'Ready to ace your next interview? Let\'s get started!')}
+                                {currentTab === 'history' && 'Review your past sessions and feedback.'}
+                                {currentTab === 'analytics' && 'Track your progress and identify areas for improvement.'}
+                                {currentTab === 'optimizer' && 'Optimize your resume for specific job descriptions.'}
+                            </p>
+                        </div>
                     </div>
                     <div className="flex items-center gap-3">
                         {currentTab === 'home' && interviews.length > 0 && (
@@ -226,12 +260,12 @@ export const Dashboard = () => {
                     </div>
                 </div>
 
-                <div className="px-8 pb-10">
+                <div className="px-4 md:px-8 pb-10">
                     {/* Home Tab Overview */}
                     {currentTab === 'home' && (
                         <div className="space-y-8 animate-fade-in-up">
                             {/* Simple Stats Cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                                 <StatCard
                                     icon={<Briefcase size={22} className="text-blue-600" />}
                                     label="Total Sessions"
@@ -274,8 +308,34 @@ export const Dashboard = () => {
                                                     {inv.status === 'COMPLETED' ? <CheckCircle2 size={18} /> : <Clock size={18} />}
                                                 </div>
                                                 <div>
-                                                    <div className="font-medium text-slate-900 group-hover:text-blue-700 transition-colors">{inv.job_description.split('\n')[0].substring(0, 50) || 'Untitled Interview'}</div>
-                                                    <div className="text-xs text-slate-500 font-medium mt-0.5">{new Date(inv.created_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                                                    {(() => {
+                                                        const jd = inv.job_description || '';
+                                                        const lines = jd.split('\n');
+                                                        let companyName = 'General';
+                                                        for (let line of lines.slice(0, 3)) {
+                                                            if (line.toLowerCase().includes('company:')) {
+                                                                companyName = line.split(':')[1]?.trim() || 'General';
+                                                                break;
+                                                            }
+                                                        }
+                                                        if (companyName === 'General' && lines[0] && lines[0].length < 50 && !lines[0].includes('position') && !lines[0].includes('role')) {
+                                                            companyName = lines[0].trim();
+                                                        }
+                                                        const roundType = inv.round_type || 'Interview';
+                                                        return (
+                                                            <div className="font-medium text-slate-900 group-hover:text-blue-700 transition-colors">
+                                                                {roundType} • {companyName}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                    <div className="text-xs text-slate-500 font-medium mt-0.5">{(() => {
+                                                        // Fix: Ensure timestamp has 'Z' for UTC parsing (handles old interviews)
+                                                        let timestamp = inv.created_at;
+                                                        if (timestamp && !timestamp.endsWith('Z') && !timestamp.includes('+')) {
+                                                            timestamp += 'Z'; // Treat as UTC if no timezone info
+                                                        }
+                                                        return new Date(timestamp).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+                                                    })()}</div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-4">
@@ -323,10 +383,42 @@ export const Dashboard = () => {
                                     return (
                                         <div key={inv.id} className="border border-slate-200 rounded-lg p-5 flex flex-col md:flex-row justify-between items-center hover:border-blue-200 hover:shadow-md transition bg-white gap-4">
                                             <div className="flex-1">
-                                                <h4 className="font-semibold text-slate-800">{inv.job_description.split('\n')[0].substring(0, 60)}...</h4>
+                                                {/* Extract company name from job description or use "General" */}
+                                                {(() => {
+                                                    const jd = inv.job_description || '';
+                                                    const lines = jd.split('\n');
+                                                    // Try to find company name in first few lines
+                                                    let companyName = 'General';
+                                                    for (let line of lines.slice(0, 3)) {
+                                                        if (line.toLowerCase().includes('company:')) {
+                                                            companyName = line.split(':')[1]?.trim() || 'General';
+                                                            break;
+                                                        }
+                                                    }
+                                                    // If no company found, check if first line looks like a company name
+                                                    if (companyName === 'General' && lines[0] && lines[0].length < 50 && !lines[0].includes('position') && !lines[0].includes('role')) {
+                                                        companyName = lines[0].trim();
+                                                    }
+
+                                                    const roundType = inv.round_type || 'Interview';
+
+                                                    return (
+                                                        <>
+                                                            <h4 className="font-semibold text-slate-800">
+                                                                {roundType} • {companyName}
+                                                            </h4>
+                                                        </>
+                                                    );
+                                                })()}
                                                 <div className="flex items-center gap-2 mt-2">
                                                     <span className="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
-                                                        <Clock size={12} /> {new Date(inv.created_at).toLocaleString()}
+                                                        <Clock size={12} /> {(() => {
+                                                            let timestamp = inv.created_at;
+                                                            if (timestamp && !timestamp.endsWith('Z') && !timestamp.includes('+')) {
+                                                                timestamp += 'Z';
+                                                            }
+                                                            return new Date(timestamp).toLocaleString();
+                                                        })()}
                                                     </span>
                                                     {inv.status === 'COMPLETED' && (
                                                         <>
@@ -390,15 +482,18 @@ export const Dashboard = () => {
     );
 };
 
-// Polished Stat Card Component
-const StatCard = ({ icon, label, value, color = "bg-white" }) => (
-    <div className={`p-6 rounded-xl shadow-sm border flex items-center gap-4 transition hover:-translate-y-1 ${color} border-slate-200 bg-white`}>
-        <div className={`p-3 rounded-xl ${color} bg-opacity-50`}>
-            {icon}
+// Polished Stat Card Component - Twisty Theme
+const StatCard = ({ icon, label, value, color }) => (
+    <div className="p-8 rounded-[2rem] shadow-soft bg-white flex flex-col gap-4 transition-all hover:-translate-y-1 border border-white/50">
+        <div className="flex justify-between items-start">
+            <div className={`p-4 rounded-2xl ${color} bg-opacity-20`}>
+                {React.cloneElement(icon, { size: 28, strokeWidth: 2 })}
+            </div>
+            {/* Optional: Add a mini sparkline or trend here */}
         </div>
         <div>
-            <div className="text-2xl font-bold text-slate-800 tracking-tight">{value}</div>
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-0.5">{label}</div>
+            <div className="text-4xl font-bold text-slate-800 tracking-tight">{value}</div>
+            <div className="text-sm font-bold text-slate-400 uppercase tracking-wider mt-1">{label}</div>
         </div>
     </div>
 );

@@ -2,6 +2,23 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+@theme {
+    /* Twisty Theme Palette */
+    --color-theme-bg: #E3E5E8;
+    --color-theme-surface: #FFFFFF;
+
+    /* Extended Radius */
+    --radius-4xl: 2rem;
+    --radius-5xl: 2.5rem;
+
+    /* Soft Shadows */
+    --shadow-soft: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
+    --shadow-inner-light: inset 0 2px 4px 0 rgba(255, 255, 255, 0.3);
+
+    /* Fonts */
+    --font-sans: "Inter", sans-serif;
+}
+
 @layer utilities {
     .animate-fade-in {
         animation: fadeIn 0.5s ease-out;
@@ -16,13 +33,13 @@
     }
 
     .glass-card {
-        @apply bg-white/80 backdrop-blur-md border border-slate-200 shadow-sm;
+        @apply bg-theme-surface rounded-3xl border border-white/50 shadow-soft;
     }
 }
 
 @layer base {
     body {
-        @apply bg-slate-50 text-slate-900 font-sans;
+        @apply bg-theme-bg text-slate-900 font-sans antialiased;
     }
 }
 

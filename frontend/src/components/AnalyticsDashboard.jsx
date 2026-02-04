@@ -28,10 +28,32 @@ export const AnalyticsDashboard = () => {
     // Get unique roles for filter dropdown
     const uniqueRoles = ['all', ...new Set(history.map(item => item.role))];
 
+    // Convert UTC timestamps to local time for display
+    const historyWithLocalDates = history.map(item => {
+        let timestamp = item.timestamp || item.date;
+        // Add 'Z' if missing (old interviews without timezone marker)
+        if (timestamp && !timestamp.endsWith('Z') && !timestamp.includes('+')) {
+            timestamp += 'Z';
+        }
+        try {
+            const localDate = new Date(timestamp);
+            const formattedDate = localDate.toLocaleString('en-US', {
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            return { ...item, date: formattedDate };
+        } catch (e) {
+            return item; // Keep original if parsing fails
+        }
+    });
+
     // Filter history based on selected role
     const filteredHistory = selectedRole === 'all'
-        ? history
-        : history.filter(item => item.role === selectedRole);
+        ? historyWithLocalDates
+        : historyWithLocalDates.filter(item => item.role === selectedRole);
 
     return (
         <div className="space-y-6 animate-fade-in">
