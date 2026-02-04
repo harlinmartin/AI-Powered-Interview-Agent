@@ -346,11 +346,11 @@ export const InterviewRoom = () => {
             return;
         }
 
-        // Trigger 2: Silence Timer (Debounce) - if user pauses for 1s while still "listening"
+        // Trigger 2: Silence Timer (Debounce) - if user pauses for 0.8s while still "listening"
         const handler = setTimeout(() => {
             console.log("Silence detected - sending");
             sendTranscript();
-        }, 1000);
+        }, 800);
 
         return () => clearTimeout(handler);
     }, [transcript, aiSpeaking, listening, resetTranscript, lastQuestion]);
