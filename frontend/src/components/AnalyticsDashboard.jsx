@@ -120,11 +120,11 @@ export const AnalyticsDashboard = () => {
                                         <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                                <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" vertical={false} />
+                                <XAxis dataKey="date" stroke="#475569" fontSize={12} tickLine={false} axisLine={false} tick={{ fill: '#475569' }} />
+                                <YAxis stroke="#475569" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} tick={{ fill: '#475569' }} />
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px', padding: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                    contentStyle={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderRadius: '12px', padding: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                                     itemStyle={{ color: '#1e293b' }}
                                     labelStyle={{ color: '#3b82f6', fontWeight: 'bold', marginBottom: '4px' }}
                                     formatter={(value, name, props) => {
@@ -152,8 +152,8 @@ export const AnalyticsDashboard = () => {
                     <div className="h-[300px] w-full flex items-center justify-center">
                         <ResponsiveContainer width="100%" height="100%">
                             <RadarChart cx="50%" cy="50%" outerRadius="80%" data={skill_radar}>
-                                <PolarGrid stroke="#e2e8f0" />
-                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 12 }} />
+                                <PolarGrid stroke="#cbd5e1" />
+                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 12, fontWeight: 500 }} />
                                 <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                                 <Radar
                                     name="Skills"

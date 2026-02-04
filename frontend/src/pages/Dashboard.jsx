@@ -31,6 +31,7 @@ export const Dashboard = () => {
     const [profileName, setProfileName] = useState(user?.name || (user?.email || 'User').split('@')[0]);
     const [profileEmail, setProfileEmail] = useState(user?.email || '');
     const [avatarFile, setAvatarFile] = useState(null);
+    const [selectedDate, setSelectedDate] = useState('');
 
     // Effect to visual sync
     useEffect(() => {
@@ -374,8 +375,33 @@ export const Dashboard = () => {
                     {/* Other Tabs */}
                     {currentTab === 'history' && (
                         <div className="glass-card rounded-xl p-6 animate-fade-in-up">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-lg font-bold text-slate-800">Session History</h3>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-slate-500 font-medium">Filter by Date:</span>
+                                    <input
+                                        type="date"
+                                        className="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 outline-none transition shadow-sm hover:border-blue-400"
+                                        value={selectedDate}
+                                        onChange={(e) => setSelectedDate(e.target.value)}
+                                    />
+                                    {selectedDate && (
+                                        <button
+                                            onClick={() => setSelectedDate('')}
+                                            className="text-xs text-red-500 hover:text-red-700 font-medium"
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
                             <div className="space-y-4">
-                                {interviews.map((inv) => {
+                                {interviews.filter(inv => {
+                                    if (!selectedDate) return true;
+                                    const invDate = new Date(inv.created_at || inv.date).toISOString().split('T')[0];
+                                    return invDate === selectedDate;
+                                }).map((inv) => {
                                     const feedback = inv.feedback_result ? JSON.parse(inv.feedback_result) : {};
                                     const score = feedback.score || 0;
                                     const metrics = feedback.metrics || {};
@@ -461,7 +487,11 @@ export const Dashboard = () => {
                                         </div>
                                     );
                                 })}
-                                {interviews.length === 0 && <p className="text-slate-500 mt-2">No history available.</p>}
+                                {interviews.filter(inv => !selectedDate || new Date(inv.created_at).toISOString().split('T')[0] === selectedDate).length === 0 && (
+                                    <p className="text-slate-500 mt-2 text-center py-8">
+                                        {selectedDate ? `No sessions found for ${selectedDate}` : 'No history available.'}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}
