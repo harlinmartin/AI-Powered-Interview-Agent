@@ -66,7 +66,9 @@ export const ResumeOptimizer = () => {
                 useAuthStore.getState().logout();
                 // The ProtectedRoute in App.jsx will handle the redirect when token becomes null
             } else if (e.response && e.response.data && e.response.data.detail) {
-                toastError(e.response.data.detail);
+                const errorMsg = e.response.data.detail;
+                const cleanMsg = errorMsg.replace(/^(400: )/, '').replace(/Internal Server Error: /, '');
+                toastError(cleanMsg);
             } else {
                 toastError("Optimization failed. Please try again.");
             }
@@ -92,21 +94,21 @@ export const ResumeOptimizer = () => {
             const better = betterMatch ? betterMatch[1].trim() : section.content;
 
             return (
-                <div key={section.title} className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700 mt-4">
-                    <h4 className="text-blue-400 font-bold mb-3 flex items-center gap-2">
+                <div key={section.title} className="bg-slate-50 rounded-2xl p-4 border border-slate-200 mt-4">
+                    <h4 className="text-blue-600 font-bold mb-3 flex items-center gap-2">
                         <AlertTriangle size={16} /> {section.title}
                     </h4>
                     <div className="space-y-3">
-                        <div className="bg-red-900/10 border border-red-900/30 p-3 rounded-lg">
-                            <span className="text-red-400 text-xs font-bold uppercase block mb-1">Original (Weak)</span>
-                            <p className="text-sm text-zinc-300">{weak}</p>
+                        <div className="bg-red-50 border border-red-100 p-3 rounded-xl">
+                            <span className="text-red-600 text-xs font-bold uppercase block mb-1">Original (Weak)</span>
+                            <p className="text-sm text-slate-600">{weak}</p>
                         </div>
                         <div className="flex justify-center">
-                            <span className="text-zinc-500 text-xs">⬇️ Transformed to Impact-Driven ⬇️</span>
+                            <span className="text-slate-400 text-xs">⬇️ Transformed to Impact-Driven ⬇️</span>
                         </div>
-                        <div className="bg-green-900/10 border border-green-900/30 p-3 rounded-lg">
-                            <span className="text-green-400 text-xs font-bold uppercase block mb-1">Optimized (Strong)</span>
-                            <p className="text-sm text-zinc-300">{better}</p>
+                        <div className="bg-green-50 border border-green-100 p-3 rounded-xl">
+                            <span className="text-green-600 text-xs font-bold uppercase block mb-1">Optimized (Strong)</span>
+                            <p className="text-sm text-slate-800">{better}</p>
                         </div>
                     </div>
                 </div>
@@ -114,11 +116,11 @@ export const ResumeOptimizer = () => {
         }
 
         return (
-            <div key={section.title} className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700 mt-4">
-                <h4 className="text-blue-400 font-bold mb-2">{section.title}</h4>
-                <div className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed font-sans">
+            <div key={section.title} className="bg-slate-50 rounded-2xl p-4 border border-slate-200 mt-4">
+                <h4 className="text-blue-600 font-bold mb-2">{section.title}</h4>
+                <div className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed font-sans">
                     {section.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').split('\n').map((line, i) => (
-                        <p key={i} className="mb-1" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<span class="text-white font-bold">$1</span>') }} />
+                        <p key={i} className="mb-1" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<span class="text-slate-900 font-bold">$1</span>') }} />
                     ))}
                 </div>
             </div>
@@ -202,35 +204,36 @@ export const ResumeOptimizer = () => {
         <div className="max-w-7xl mx-auto space-y-8 animate-fade-in flex flex-col xl:flex-row gap-6">
             {/* Main Content */}
             <div className="flex-1 space-y-8">
-                <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-3xl relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+                <div className="bg-white shadow-soft border border-white/60 p-4 md:p-8 rounded-[2.5rem] relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-100/50 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
 
-                    <h2 className="text-3xl font-bold mb-6 flex items-center gap-3">
-                        <FileText className="text-blue-400" /> Resume ATS Optimizer
+                    <h2 className="text-3xl font-bold mb-6 flex items-center gap-3 text-slate-800">
+                        <FileText className="text-blue-600" /> Resume ATS Optimizer
                     </h2>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                         <div className="space-y-6">
                             <div>
-                                <label className="block text-zinc-400 text-xs font-bold uppercase tracking-wider mb-2">Target Job Description</label>
+                                <label className="block text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Target Job Description</label>
                                 <textarea
                                     value={jobDesc}
                                     onChange={(e) => setJobDesc(e.target.value)}
-                                    className="w-full h-40 bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 text-sm focus:outline-none focus:border-blue-500 transition resize-none custom-scrollbar"
+                                    className="w-full h-40 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition resize-none custom-scrollbar text-slate-800 placeholder-slate-400"
                                     placeholder="Paste the Job Description here..."
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-zinc-400 text-xs font-bold uppercase tracking-wider mb-2">Upload Resume</label>
-                                <div className="border-2 border-dashed border-zinc-700 rounded-xl p-8 flex flex-col items-center justify-center hover:bg-zinc-800/30 hover:border-blue-500/50 transition cursor-pointer relative group">
+                                <label className="block text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Upload Resume</label>
+                                <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center hover:bg-blue-50 hover:border-blue-400 transition cursor-pointer relative group bg-slate-50">
                                     <input
                                         type="file"
+                                        accept=".pdf"
                                         onChange={(e) => setFile(e.target.files?.[0] || null)}
                                         className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                                     />
-                                    <Upload className="mb-3 text-zinc-500 group-hover:text-blue-400 transition" size={32} />
-                                    <p className="text-sm font-medium">{file ? file.name : "Drop PDF/Image here"}</p>
+                                    <Upload className="mb-3 text-slate-400 group-hover:text-blue-600 transition" size={32} />
+                                    <p className="text-sm font-medium text-slate-600">{file ? file.name : "Drop PDF Resume here"}</p>
                                 </div>
                             </div>
 
@@ -245,7 +248,7 @@ export const ResumeOptimizer = () => {
                         </div>
 
                         {/* Results Section */}
-                        <div className="bg-black/40 rounded-2xl border border-zinc-800 p-6 relative min-h-[500px] max-h-[800px] overflow-y-auto custom-scrollbar flex flex-col">
+                        <div className="bg-slate-50 rounded-[2rem] border border-slate-200 p-6 relative min-h-[500px] max-h-[800px] overflow-y-auto custom-scrollbar flex flex-col">
                             {!result ? (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-600 text-center p-8">
                                     <div className="p-4 bg-zinc-900 rounded-full mb-4">
@@ -257,17 +260,17 @@ export const ResumeOptimizer = () => {
                                 <>
                                     <div ref={resultsRef} className="space-y-6 animate-fade-in-up pb-4 flex-1 p-2">
                                         {/* Header Score */}
-                                        <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
+                                        <div className="flex items-center justify-between p-4 bg-slate-100 rounded-2xl border border-slate-200">
                                             <div>
-                                                <div className="text-zinc-400 text-xs font-bold uppercase">ATS Match Score</div>
-                                                <div className={`text-4xl font-bold mt-1 ${result.ats_score > 70 ? 'text-green-400' : result.ats_score > 40 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                                <div className="text-slate-500 text-xs font-bold uppercase">ATS Match Score</div>
+                                                <div className={`text-4xl font-bold mt-1 ${result.ats_score > 70 ? 'text-green-600' : result.ats_score > 40 ? 'text-amber-500' : 'text-red-500'}`}>
                                                     {result.ats_score}%
                                                 </div>
                                             </div>
-                                            <div className="h-16 w-px bg-zinc-700"></div>
+                                            <div className="h-16 w-px bg-slate-300"></div>
                                             <div className="text-right">
-                                                <div className="text-zinc-400 text-xs font-bold uppercase">Status</div>
-                                                <div className="font-medium mt-1 text-white">
+                                                <div className="text-slate-500 text-xs font-bold uppercase">Status</div>
+                                                <div className="font-medium mt-1 text-slate-800">
                                                     {result.ats_score > 70 ? "Excellent Match" : result.ats_score > 40 ? "Needs Improvement" : "Poor Match"}
                                                 </div>
                                             </div>
@@ -281,7 +284,7 @@ export const ResumeOptimizer = () => {
                                                 </h3>
                                                 <div className="flex flex-wrap gap-2">
                                                     {result.missing_keywords.map((kw, i) => (
-                                                        <span key={i} className="px-3 py-1 bg-red-900/20 text-red-200 border border-red-900/30 rounded-full text-xs">
+                                                        <span key={i} className="px-3 py-1 bg-red-100 text-red-700 border border-red-200 rounded-full text-xs font-medium">
                                                             {kw}
                                                         </span>
                                                     ))}
@@ -321,7 +324,7 @@ export const ResumeOptimizer = () => {
             </div>
 
             {/* History Sidebar */}
-            <div className="w-full xl:w-80 bg-zinc-900/30 border border-zinc-800 rounded-3xl p-6 h-fit">
+            <div className="w-full xl:w-80 bg-white border border-white/60 shadow-soft rounded-[2.5rem] p-6 h-fit">
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                     <RefreshCw size={18} className="text-zinc-500" /> Recent Scans
                 </h3>
@@ -333,15 +336,15 @@ export const ResumeOptimizer = () => {
                             <div
                                 key={item.id}
                                 onClick={() => setResult(item)}
-                                className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl cursor-pointer hover:border-blue-500/50 hover:bg-zinc-800 transition group"
+                                className="p-3 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition group"
                             >
                                 <div className="flex justify-between items-start mb-1">
-                                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${item.ats_score > 70 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${item.ats_score > 70 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                         {item.ats_score}%
                                     </span>
-                                    <span className="text-[10px] text-zinc-500">{new Date(item.created_at).toLocaleDateString()}</span>
+                                    <span className="text-[10px] text-slate-400">{new Date(item.created_at).toLocaleDateString()}</span>
                                 </div>
-                                <p className="text-xs text-zinc-300 font-medium truncate group-hover:text-blue-200 transition">
+                                <p className="text-xs text-slate-600 font-medium truncate group-hover:text-blue-700 transition">
                                     {item.job_description.substring(0, 40)}...
                                 </p>
                             </div>

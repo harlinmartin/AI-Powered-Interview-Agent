@@ -23,15 +23,23 @@ def close_client():
     client.close()
 
 def init_db():
-    collections = client.get_collections()
-    if COLLECTION_NAME not in [c.name for c in collections.collections]:
-        client.create_collection(
-            collection_name=COLLECTION_NAME,
-            vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),
-        )
+    try:
+        collections = client.get_collections()
+        if COLLECTION_NAME not in [c.name for c in collections.collections]:
+            client.create_collection(
+                collection_name=COLLECTION_NAME,
+                vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),
+            )
+        print(f"✅ Qdrant connected: Collection '{COLLECTION_NAME}' ready")
+    except Exception as e:
+        print(f"⚠️  WARNING: Could not connect to Qdrant on startup: {e}")
+        print("Qdrant will be retried on first use. Backend will continue running.")
 
-# Initialize on module load
-init_db()
+# Initialize on module load (non-blocking)
+try:
+    init_db()
+except:
+    pass  # Allow backend to start even if Qdrant is down
 
 def ingest_resume(file_bytes: bytes, interview_id: int):
     try:
