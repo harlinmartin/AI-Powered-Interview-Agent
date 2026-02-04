@@ -614,6 +614,19 @@ export const InterviewRoom = () => {
                                 >
                                     <MicOff size={10} /> Reset Mic
                                 </button>
+
+                                {/* Fallback Toggle for Mobile */}
+                                <button
+                                    onClick={() => {
+                                        setUseDeepgram(!useDeepgram);
+                                        // Reset transcripts to be safe
+                                        resetTranscript();
+                                        setDeepgramTranscript("");
+                                    }}
+                                    className={`text-xs flex items-center gap-1 border px-2 py-1 rounded ${!useDeepgram ? 'text-green-400 border-green-500/20 bg-green-500/10' : 'text-slate-500 border-slate-700 hover:text-white'}`}
+                                >
+                                    <span className="text-[10px] font-bold">{useDeepgram ? '⚡ Deepgram' : 'Basic Mic'}</span>
+                                </button>
                             </div>
                         )}
                     </div>
@@ -629,19 +642,21 @@ export const InterviewRoom = () => {
             </div>
 
             {/* MIDDLE: Code Editor (Conditional) */}
-            {showCodeEditor && (
-                <div className="flex-[2] rounded-[2.5rem] flex flex-col overflow-hidden animate-fade-in-up shadow-soft z-10 h-full bg-white border border-white/60">
-                    <ProfessionalWorkspace
-                        items={questions}
-                        activeTab={activeCodeTab}
-                        onStateChange={(newItems, newActiveTab) => {
-                            setQuestions(newItems);
-                            if (newActiveTab) setActiveCodeTab(newActiveTab);
-                        }}
-                        onSubmit={handleEndInterview}
-                    />
-                </div>
-            )}
+            {
+                showCodeEditor && (
+                    <div className="flex-[2] rounded-[2.5rem] flex flex-col overflow-hidden animate-fade-in-up shadow-soft z-10 h-full bg-white border border-white/60">
+                        <ProfessionalWorkspace
+                            items={questions}
+                            activeTab={activeCodeTab}
+                            onStateChange={(newItems, newActiveTab) => {
+                                setQuestions(newItems);
+                                if (newActiveTab) setActiveCodeTab(newActiveTab);
+                            }}
+                            onSubmit={handleEndInterview}
+                        />
+                    </div>
+                )
+            }
 
             {/* RIGHT: User Video & Controls */}
             <div className="flex-1 bg-black rounded-[2.5rem] overflow-hidden relative border border-white/60 flex flex-col shadow-soft min-h-0">
@@ -746,6 +761,6 @@ export const InterviewRoom = () => {
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
