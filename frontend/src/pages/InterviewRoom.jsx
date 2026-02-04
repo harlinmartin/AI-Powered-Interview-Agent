@@ -122,122 +122,145 @@ export const InterviewRoom = () => {
         }
     }, [isVideoEnabled, isScreenSharing]);
 
-    // 6. WebSocket Setup
+    // 6. WebSocket Setup (Robust Auto-Reconnect)
     useEffect(() => {
         if (!token || !id || !started) return;
 
-        console.log("Attempting WebSocket Connection...");
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setWsStatus("Connecting...");
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        const WS_URL = API_URL.replace(/^http/, 'ws');
-        const socket = new WebSocket(`${WS_URL}/interview/ws/${id}?token=${token}`);
+        let reconnectTimeout;
+        let isUnmounting = false;
 
-        socket.onopen = () => {
-            console.log("WS Connected");
-            setWsStatus("Connected");
+        const connectWebSocket = () => {
+            if (isUnmounting) return;
 
-            // HEARTBEAT: Keep connection alive every 10 seconds
-            wsRef.current.pingInterval = setInterval(() => {
-                if (socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({ type: "ping" }));
-                }
-            }, 10000);
-        };
+            console.log("Attempting WebSocket Connection...");
+            setWsStatus("Connecting...");
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+            const WS_URL = API_URL.replace(/^http/, 'ws');
+            const socket = new WebSocket(`${WS_URL}/interview/ws/${id}?token=${token}`);
 
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'ai_response') {
-                setAiThinking(false); // Stop thinking animation
-                setAiResponse(data.content);
-                setLastQuestion(data.content); // Track the question for validation
-                speak(data.content);
-                setThinkTime(10);
+            socket.onopen = () => {
+                console.log("WS Connected");
+                setWsStatus("Connected");
+                // Clear any existing reconnect timers
+                if (reconnectTimeout) clearTimeout(reconnectTimeout);
 
-                // Check if AI is concluding the interview
-                const conclusionPhrases = [
-                    'concludes our interview',
-                    'that concludes the interview',
-                    'thank you for your time',
-                    'we are done',
-                    'interview is complete',
-                    'that wraps up'
-                ];
-
-                const isConclusion = conclusionPhrases.some(phrase =>
-                    data.content.toLowerCase().includes(phrase)
-                );
-
-                if (isConclusion) {
-                    console.log('🎯 AI concluded interview early');
-                    // Wait 3 seconds for user to hear the conclusion, then auto-end
-                    setTimeout(() => {
-                        handleEndInterview();
-                    }, 3000);
-                }
-            }
-
-            if (data.type === 'coding_assessment') {
-                console.log("Starting Coding Assessment");
-                setShowCodeEditor(true);
-
-                setQuestions(prev => {
-                    let newQuestions = { ...prev };
-
-                    if (typeof data.questions === 'string') {
-                        const fullText = data.questions;
-                        let q1Text = "", q2Text = "";
-
-                        // Robust Clean Split
-                        if (fullText.includes("// Question 2:")) {
-                            const parts = fullText.split("// Question 2:");
-                            q1Text = parts[0].trim();
-                            q2Text = "// Question 2:\n" + parts[1].trim();
-                        } else if (fullText.includes("# Question 2:")) {
-                            const parts = fullText.split("# Question 2:");
-                            q1Text = parts[0].trim();
-                            q2Text = "# Question 2:\n" + parts[1].trim();
-                        } else {
-                            // Fallback: Duplicate text to Q1 if no split found
-                            q1Text = fullText;
-                            q2Text = "// No specific Question 2 found.";
-                        }
-
-                        newQuestions.q1 = {
-                            ...newQuestions.q1,
-                            desc: q1Text,
-                            code: q1Text + "\n\n// Write your solution below:\n"
-                        };
-
-                        newQuestions.q2 = {
-                            ...newQuestions.q2,
-                            desc: q2Text,
-                            code: q2Text + "\n\n// Write your solution below:\n"
-                        };
-
-                    } else if (data.questions && typeof data.questions === 'object') {
-                        return { ...prev, ...data.questions };
+                // HEARTBEAT: Keep connection alive every 10 seconds
+                wsRef.current.pingInterval = setInterval(() => {
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: "ping" }));
                     }
-                    return newQuestions;
-                });
-            }
+                }, 10000);
+            };
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'ai_response') {
+                    setAiThinking(false); // Stop thinking animation
+                    setAiResponse(data.content);
+                    setLastQuestion(data.content); // Track the question for validation
+                    speak(data.content);
+                    setThinkTime(10);
+
+                    // Check if AI is concluding the interview
+                    const conclusionPhrases = [
+                        'concludes our interview',
+                        'that concludes the interview',
+                        'thank you for your time',
+                        'we are done',
+                        'interview is complete',
+                        'that wraps up'
+                    ];
+
+                    const isConclusion = conclusionPhrases.some(phrase =>
+                        data.content.toLowerCase().includes(phrase)
+                    );
+
+                    if (isConclusion) {
+                        console.log('🎯 AI concluded interview early');
+                        // Wait 3 seconds for user to hear the conclusion, then auto-end
+                        setTimeout(() => {
+                            handleEndInterview();
+                        }, 3000);
+                    }
+                }
+
+                if (data.type === 'coding_assessment') {
+                    console.log("Starting Coding Assessment");
+                    setShowCodeEditor(true);
+
+                    setQuestions(prev => {
+                        let newQuestions = { ...prev };
+
+                        if (typeof data.questions === 'string') {
+                            const fullText = data.questions;
+                            let q1Text = "", q2Text = "";
+
+                            // Robust Clean Split
+                            if (fullText.includes("// Question 2:")) {
+                                const parts = fullText.split("// Question 2:");
+                                q1Text = parts[0].trim();
+                                q2Text = "// Question 2:\n" + parts[1].trim();
+                            } else if (fullText.includes("# Question 2:")) {
+                                const parts = fullText.split("# Question 2:");
+                                q1Text = parts[0].trim();
+                                q2Text = "# Question 2:\n" + parts[1].trim();
+                            } else {
+                                // Fallback: Duplicate text to Q1 if no split found
+                                q1Text = fullText;
+                                q2Text = "// No specific Question 2 found.";
+                            }
+
+                            newQuestions.q1 = {
+                                ...newQuestions.q1,
+                                desc: q1Text,
+                                code: q1Text + "\n\n// Write your solution below:\n"
+                            };
+
+                            newQuestions.q2 = {
+                                ...newQuestions.q2,
+                                desc: q2Text,
+                                code: q2Text + "\n\n// Write your solution below:\n"
+                            };
+
+                        } else if (data.questions && typeof data.questions === 'object') {
+                            return { ...prev, ...data.questions };
+                        }
+                        return newQuestions;
+                    });
+                }
+            };
+
+            socket.onclose = () => {
+                console.log("WS Disconnected");
+                setWsStatus("Disconnected");
+                setAiThinking(false); // CRITICAL: Reset thinking state so UI doesn't hang
+
+                if (wsRef.current?.pingInterval) clearInterval(wsRef.current.pingInterval);
+
+                // Auto-reconnect after 3 seconds if not unmounting
+                if (!isUnmounting) {
+                    console.log("Attempting to reconnect in 3s...");
+                    reconnectTimeout = setTimeout(connectWebSocket, 3000);
+                }
+            };
+
+            socket.onerror = (err) => {
+                console.error("WS Error:", err);
+                setWsStatus("Error");
+                setAiThinking(false); // Reset thinking state
+                socket.close(); // Force close to trigger onclose and reconnect
+            };
+
+            wsRef.current = socket;
         };
 
-        socket.onclose = () => {
-            console.log("WS Disconnected");
-            setWsStatus("Disconnected");
-            if (wsRef.current?.pingInterval) clearInterval(wsRef.current.pingInterval);
-        };
+        connectWebSocket();
 
-        socket.onerror = (err) => {
-            console.error("WS Error:", err);
-            setWsStatus("Error");
-        };
-
-        wsRef.current = socket;
         return () => {
+            isUnmounting = true;
+            if (reconnectTimeout) clearTimeout(reconnectTimeout);
             if (wsRef.current?.pingInterval) clearInterval(wsRef.current.pingInterval);
-            socket.close();
+            if (wsRef.current) wsRef.current.close();
         };
     }, [id, token, speak, navigate, started]);
 
