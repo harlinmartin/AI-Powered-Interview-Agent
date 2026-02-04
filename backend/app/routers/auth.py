@@ -196,6 +196,7 @@ async def forgot_password(data: ForgotPassword, db: Session = Depends(get_db)):
         return {"message": "Failed to send email. Please try again later."}
 
 @router.post("/reset-password")
+def reset_password(data: ResetPasswordSchema, db: Session = Depends(get_db)):
     try:
         # Sanitize token (remove trailing dots often added by email clients)
         data.token = data.token.strip().rstrip('.')
