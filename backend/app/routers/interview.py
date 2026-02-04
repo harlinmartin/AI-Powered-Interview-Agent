@@ -417,8 +417,8 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
                 db.add(user_msg)
                 db.commit()
                 
-                # 2. Get RAG Context
-                context = get_relevant_context(user_text, interview_id)
+                # 2. Get RAG Context (Offload to threadpool)
+                context = await run_in_threadpool(get_relevant_context, user_text, interview_id)
                 
                 # 3. Get LLM Response
                 # Fetch fresh history (including new user msg)
@@ -444,10 +444,10 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
                     
                     # 1. Generate Coding Questions
                     print("Generating Coding Questions...")
-                    coding_questions = llm_service.generate_coding_questions(interview.job_description)
+                    coding_questions = await run_in_threadpool(llm_service.generate_coding_questions, interview.job_description)
 
                     # 2. Verbal Transition Message (Dynamic)
-                    transition_msg = llm_service.generate_transition_message(history, user_text, interview.job_description)
+                    transition_msg = await run_in_threadpool(llm_service.generate_transition_message, history, user_text, interview.job_description)
                     
                     # Save Transition Message
                     transition_msg_db = models.Message(interview_id=interview_id, role="assistant", content=transition_msg)
@@ -474,15 +474,17 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
 
                 # Extract last question from frontend (if provided)
                 last_question = data.get('last_question', None)
-
-                ai_text = llm_service.generate_response(
+                
+                # Offload blocking LLM generation
+                ai_text = await run_in_threadpool(
+                    llm_service.generate_response,
                     user_message=user_text,
                     context=context,
                     job_description=interview.job_description,
                     history=history,
                     round_type=interview.round_type,
                     difficulty=interview.difficulty,
-                    last_question=last_question  # Pass for validation
+                    last_question=last_question
                 )
                 
                 # 4. Save AI Response
