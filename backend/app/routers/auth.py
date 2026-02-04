@@ -129,21 +129,9 @@ def google_login(data: GoogleLoginData, db: Session = Depends(get_db)):
         print(f"GOOGLE LOGIN ERROR: {e}")  # Print specific error to logs
         raise HTTPException(status_code=401, detail=f"Invalid Google Token: {str(e)}")
 
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 from pydantic import EmailStr
-
-# Email Configuration
-conf = ConnectionConfig(
-    MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
-    MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
-    MAIL_FROM=os.getenv("MAIL_FROM"),
-    MAIL_PORT=int(os.getenv("MAIL_PORT", 587)),
-    MAIL_SERVER=os.getenv("MAIL_SERVER", "smtp.gmail.com"),
-    MAIL_STARTTLS=True,
-    MAIL_SSL_TLS=False,
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True
-)
 
 class ForgotPassword(BaseModel):
     email: EmailStr
@@ -164,27 +152,37 @@ async def forgot_password(data: ForgotPassword, db: Session = Depends(get_db)):
     to_encode = {"sub": user.email, "type": "reset", "exp": expire}
     reset_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     
-    # Send Email
+    # Send Email via SendGrid
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     
-    message = MessageSchema(
-        subject="Password Reset Request",
-        recipients=[data.email],
-        body=f"""
-        <h3>Password Reset</h3>
-        <p>Click the link below to reset your password. This link expires in 15 minutes.</p>
-        <a href="{reset_link}">Reset Password</a>
-        <br>
-        <p>If you did not request this, please ignore this email.</p>
-        """,
-        subtype=MessageType.html
-    )
+    sendgrid_api_key = os.getenv("SENDGRID_API_KEY")
+    if not sendgrid_api_key:
+        print("⚠️ SENDGRID_API_KEY not set - email not sent")
+        return {"message": "Email service not configured. Please contact support."}
     
-    fm = FastMail(conf)
-    await fm.send_message(message)
-    
-    return {"message": "Reset link sent"}
+    try:
+        message = Mail(
+            from_email=os.getenv("MAIL_FROM", "noreply@elevateai.com"),
+            to_emails=data.email,
+            subject="Password Reset Request",
+            html_content=f"""
+            <h3>Password Reset</h3>
+            <p>Click the link below to reset your password. This link expires in 15 minutes.</p>
+            <a href="{reset_link}">Reset Password</a>
+            <br><br>
+            <p>If you did not request this, please ignore this email.</p>
+            """
+        )
+        
+        sg = SendGridAPIClient(sendgrid_api_key)
+        response = sg.send(message)
+        print(f"✅ Email sent via SendGrid: {response.status_code}")
+        
+        return {"message": "Reset link sent"}
+    except Exception as e:
+        print(f"❌ SendGrid error: {e}")
+        return {"message": "Failed to send email. Please try again later."}
 
 @router.post("/reset-password")
 def reset_password(data: ResetPasswordSchema, db: Session = Depends(get_db)):
