@@ -60,8 +60,8 @@ export const AnalyticsDashboard = () => {
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl relative overflow-hidden group hover:border-blue-500/30 hover:shadow-md transition shadow-sm">
-                    <div className="absolute right-0 top-0 p-4 opacity-80 group-hover:opacity-100 transition">
-                        <TrendingUp size={60} className="text-blue-100" />
+                    <div className="absolute right-0 top-0 p-4 opacity-30 group-hover:opacity-50 transition">
+                        <TrendingUp size={60} className="text-blue-500" />
                     </div>
                     <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Average Score</div>
                     <div className="text-4xl font-bold text-slate-800 relative z-10">{avg_score}%</div>
@@ -71,8 +71,8 @@ export const AnalyticsDashboard = () => {
                 </div>
 
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl relative overflow-hidden group hover:border-purple-500/30 hover:shadow-md transition shadow-sm">
-                    <div className="absolute right-0 top-0 p-4 opacity-80 group-hover:opacity-100 transition">
-                        <Award size={60} className="text-purple-100" />
+                    <div className="absolute right-0 top-0 p-4 opacity-30 group-hover:opacity-50 transition">
+                        <Award size={60} className="text-purple-500" />
                     </div>
                     <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Strongest Skill</div>
                     <div className="text-4xl font-bold text-slate-800 truncate relative z-10">
@@ -82,8 +82,8 @@ export const AnalyticsDashboard = () => {
                 </div>
 
                 <div className="bg-white border border-slate-200 p-6 rounded-2xl relative overflow-hidden group hover:border-emerald-500/30 hover:shadow-md transition shadow-sm">
-                    <div className="absolute right-0 top-0 p-4 opacity-80 group-hover:opacity-100 transition">
-                        <BarChart2 size={60} className="text-emerald-100" />
+                    <div className="absolute right-0 top-0 p-4 opacity-30 group-hover:opacity-50 transition">
+                        <BarChart2 size={60} className="text-emerald-500" />
                     </div>
                     <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Total Sessions</div>
                     <div className="text-4xl font-bold text-slate-800 relative z-10">{history.length}</div>
