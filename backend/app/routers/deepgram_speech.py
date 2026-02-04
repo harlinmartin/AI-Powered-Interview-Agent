@@ -1,10 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from deepgram import (
-    DeepgramClient,
-    DeepgramClientOptions,
-    LiveTranscriptionEvents,
-    LiveOptions,
-)
+from deepgram import DeepgramClient, LiveTranscriptionEvents, LiveOptions
 import os
 import asyncio
 import json
@@ -24,10 +19,7 @@ async def websocket_audio_endpoint(websocket: WebSocket, interview_id: int):
     
     try:
         # Initialize Deepgram client
-        config = DeepgramClientOptions(
-            options={"keepalive": "true"}
-        )
-        deepgram = DeepgramClient(DEEPGRAM_API_KEY, config)
+        deepgram = DeepgramClient(DEEPGRAM_API_KEY)
         
         # Create Deepgram connection
         dg_connection = deepgram.listen.asynclive.v("1")
