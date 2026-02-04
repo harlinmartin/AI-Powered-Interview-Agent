@@ -16,3 +16,4 @@ google-auth
 requests
 fastapi-mail
 Pillow
+deepgram-sdk

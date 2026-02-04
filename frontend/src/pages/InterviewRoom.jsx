@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import 'regenerator-runtime/runtime'; // Polyfill for SpeechRecognition
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import { useTTS } from '../hooks/useTTS';
+import { useDeepgramSpeech } from '../hooks/useDeepgramSpeech';
 import { useAuthStore } from '../store/useAuthStore';
 import {
     Mic, MicOff, PhoneOff, Video, VideoOff,
@@ -40,6 +41,31 @@ export const InterviewRoom = () => {
     const { speak, cancel: cancelTTS, speaking: aiSpeaking } = useTTS();
     const [aiResponse, setAiResponse] = useState("Connected. Waiting for you to start...");
     const [lastQuestion, setLastQuestion] = useState(null); // NEW: Track last AI question for validation
+
+    // Deepgram State
+    const [useDeepgram, setUseDeepgram] = useState(true); // Try Deepgram first
+    const [deepgramTranscript, setDeepgramTranscript] = useState("");
+    const [deepgramError, setDeepgramError] = useState(null);
+
+    // Deepgram Hook
+    const { isConnected: deepgramConnected } = useDeepgramSpeech(
+        id,
+        started && !aiSpeaking && !isMuted && useDeepgram,
+        (text, isFinal) => {
+            console.log(`📝 Deepgram: ${text} (final: ${isFinal})`);
+            setDeepgramTranscript(prev => {
+                if (isFinal) {
+                    return prev + " " + text;
+                }
+                return text; // Show interim results
+            });
+        },
+        (error) => {
+            console.error("❌ Deepgram error, falling back to Web Speech API:", error);
+            setDeepgramError(error);
+            setUseDeepgram(false); // Fallback to Web Speech API
+        }
+    );
 
     // Timers
     const [remainingTime, setRemainingTime] = useState(600);
@@ -323,27 +349,36 @@ export const InterviewRoom = () => {
         };
     }, [browserSupportsSpeechRecognition, started, aiSpeaking, isMuted]);
 
-    // 9. Transcript Sender (Fixed & Robust)
+    // 9. Transcript Sender (Deepgram or Web Speech API)
     useEffect(() => {
-        // BasicValidation
-        if (!transcript || transcript.trim().length < 2) return;
+        // Use Deepgram transcript if available, otherwise use Web Speech API
+        const currentTranscript = useDeepgram ? deepgramTranscript : transcript;
+
+        // Basic Validation
+        if (!currentTranscript || currentTranscript.trim().length < 2) return;
         if (aiSpeaking) return;
 
         const sendTranscript = () => {
             if (wsRef.current?.readyState === WebSocket.OPEN) {
-                console.log('📤 Sending transcript:', transcript);
+                console.log('📤 Sending transcript:', currentTranscript);
                 setAiThinking(true);
                 wsRef.current.send(JSON.stringify({
                     type: 'user_audio_text',
-                    content: transcript,
+                    content: currentTranscript,
                     last_question: lastQuestion
                 }));
-                resetTranscript();
+
+                // Reset appropriate transcript
+                if (useDeepgram) {
+                    setDeepgramTranscript("");
+                } else {
+                    resetTranscript();
+                }
             }
         };
 
         // Trigger 1: If listening stopped (browser detected end of speech), send IMMEDIATELY
-        if (!listening) {
+        if (!useDeepgram && !listening) {
             console.log("Speech stopped - sending immediately");
             sendTranscript();
             return;
@@ -356,7 +391,7 @@ export const InterviewRoom = () => {
         }, 1500);
 
         return () => clearTimeout(handler);
-    }, [transcript, aiSpeaking, listening, resetTranscript, lastQuestion]);
+    }, [transcript, deepgramTranscript, useDeepgram, aiSpeaking, listening, resetTranscript, lastQuestion]);
 
     // 11. Safety Timeout for Thinking State (to prevent hanging if backend fails)
     useEffect(() => {
@@ -534,8 +569,11 @@ export const InterviewRoom = () => {
                                 <button onClick={() => speak(aiResponse)} className="text-xs text-slate-500 hover:text-white transition-colors flex items-center gap-1">
                                     <PlayCircle size={12} /> Replay
                                 </button>
-                                {transcript && (
-                                    <span className="ml-3 text-xs text-slate-700 truncate max-w-[150px]">Last heard: "{transcript}"</span>
+                                {(useDeepgram ? deepgramTranscript : transcript) && (
+                                    <span className="ml-3 text-xs text-slate-700 truncate max-w-[150px]">
+                                        Last heard: "{useDeepgram ? deepgramTranscript : transcript}"
+                                        {useDeepgram && <span className="ml-1 text-green-500">⚡</span>}
+                                    </span>
                                 )}
                                 {/* Manual Mic Reset for debugging - ALWAYS VISIBLE */}
                                 <button

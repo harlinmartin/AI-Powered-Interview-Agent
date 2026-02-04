@@ -7,7 +7,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app import models, database
-from app.routers import auth, interview, analytics
+from app.routers import auth, interview, analytics, deepgram_speech
 
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -35,6 +35,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(interview.router)
 app.include_router(analytics.router)
+app.include_router(deepgram_speech.router)
 
 @app.get("/")
 def read_root():
