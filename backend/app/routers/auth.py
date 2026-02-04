@@ -129,8 +129,8 @@ def google_login(data: GoogleLoginData, db: Session = Depends(get_db)):
         print(f"GOOGLE LOGIN ERROR: {e}")  # Print specific error to logs
         raise HTTPException(status_code=401, detail=f"Invalid Google Token: {str(e)}")
 
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 from pydantic import EmailStr
 
 class ForgotPassword(BaseModel):
@@ -152,19 +152,29 @@ async def forgot_password(data: ForgotPassword, db: Session = Depends(get_db)):
     to_encode = {"sub": user.email, "type": "reset", "exp": expire}
     reset_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     
-    # Send Email via SendGrid
+    # Send Email via Brevo
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     
-    sendgrid_api_key = os.getenv("SENDGRID_API_KEY")
-    if not sendgrid_api_key:
-        print("⚠️ SENDGRID_API_KEY not set - email not sent")
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+    if not brevo_api_key:
+        print("⚠️ BREVO_API_KEY not set - email not sent")
         return {"message": "Email service not configured. Please contact support."}
     
     try:
-        message = Mail(
-            from_email=os.getenv("MAIL_FROM", "noreply@elevateai.com"),
-            to_emails=data.email,
+        # Configure Brevo API
+        configuration = sib_api_v3_sdk.Configuration()
+        configuration.api_key['api-key'] = brevo_api_key
+        
+        api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+        
+        # Create email
+        sender = {"email": os.getenv("MAIL_FROM", "noreply@elevateai.com"), "name": "ElevateAI"}
+        to = [{"email": data.email}]
+        
+        send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+            to=to,
+            sender=sender,
             subject="Password Reset Request",
             html_content=f"""
             <h3>Password Reset</h3>
@@ -175,13 +185,13 @@ async def forgot_password(data: ForgotPassword, db: Session = Depends(get_db)):
             """
         )
         
-        sg = SendGridAPIClient(sendgrid_api_key)
-        response = sg.send(message)
-        print(f"✅ Email sent via SendGrid: {response.status_code}")
+        # Send email
+        api_response = api_instance.send_transac_email(send_smtp_email)
+        print(f"✅ Email sent via Brevo: {api_response.message_id}")
         
         return {"message": "Reset link sent"}
-    except Exception as e:
-        print(f"❌ SendGrid error: {e}")
+    except ApiException as e:
+        print(f"❌ Brevo error: {e}")
         return {"message": "Failed to send email. Please try again later."}
 
 @router.post("/reset-password")

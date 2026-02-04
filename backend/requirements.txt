@@ -17,4 +17,4 @@ requests
 fastapi-mail
 Pillow
 deepgram-sdk
-sendgrid
+sib-api-v3-sdk
