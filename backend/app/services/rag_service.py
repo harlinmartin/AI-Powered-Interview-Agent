@@ -32,6 +32,20 @@ def init_db():
                 collection_name=COLLECTION_NAME,
                 vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),
             )
+            print(f"✅ Created collection '{COLLECTION_NAME}'")
+        
+        # Create payload index for interview_id filtering (required for filters)
+        try:
+            client.create_payload_index(
+                collection_name=COLLECTION_NAME,
+                field_name="interview_id",
+                field_schema=models.PayloadSchemaType.INTEGER
+            )
+            print(f"✅ Created payload index for 'interview_id'")
+        except Exception as idx_err:
+            # Index might already exist, that's fine
+            print(f"ℹ️  Payload index creation skipped (may already exist): {idx_err}")
+        
         print(f"✅ Qdrant connected: Collection '{COLLECTION_NAME}' ready")
     except Exception as e:
         print(f"⚠️  WARNING: Could not connect to Qdrant on startup: {e}")
