@@ -136,6 +136,17 @@ export const InterviewRoom = () => {
         };
 
         startMedia();
+
+        // Cleanup function to stop media when component unmounts or started changes
+        return () => {
+            if (videoRef.current && videoRef.current.srcObject) {
+                const stream = videoRef.current.srcObject;
+                stream.getTracks().forEach(track => {
+                    track.stop();
+                    console.log(`Cleanup: Stopped ${track.kind} track`);
+                });
+            }
+        };
     }, [started, isScreenSharing]);
 
     // 5. Toggle Video Track (Mute Video)
@@ -459,6 +470,27 @@ export const InterviewRoom = () => {
     }
 
     const handleEndInterview = async () => {
+        // CRITICAL: Stop all media streams first (camera/microphone)
+        if (videoRef.current && videoRef.current.srcObject) {
+            const stream = videoRef.current.srcObject;
+            stream.getTracks().forEach(track => {
+                track.stop();
+                console.log(`Stopped ${track.kind} track:`, track.label);
+            });
+            videoRef.current.srcObject = null;
+        }
+
+        // Stop speech recognition
+        SpeechRecognition.stopListening();
+
+        // Stop TTS
+        cancelTTS();
+
+        // Close WebSocket
+        if (wsRef.current) {
+            wsRef.current.close();
+        }
+
         // Call finalize API
         if (token && id) {
             try {
