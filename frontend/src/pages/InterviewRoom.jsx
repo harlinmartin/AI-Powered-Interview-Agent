@@ -268,22 +268,25 @@ export const InterviewRoom = () => {
     useEffect(() => {
         if (!started) return;
 
-        console.log(`Speech Logic: AI Speaking: ${aiSpeaking}, Muted: ${isMuted}`);
+        console.log(`Speech Logic: AI Speaking: ${aiSpeaking}, Muted: ${isMuted}, Listening: ${listening}`);
 
         if (aiSpeaking) {
             SpeechRecognition.stopListening();
         } else {
-            if (!isMuted && !listening) {
-                try {
-                    // Force en-US and continuous
-                    SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
-                    console.log("Speech Logic: Restarting Listener...");
-                } catch (e) {
-                    console.error("Speech Logic: Start Failed", e);
-                }
+            if (!isMuted) {
+                // Force stop and restart to ensure clean state
+                SpeechRecognition.stopListening();
+                setTimeout(() => {
+                    try {
+                        SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
+                        console.log("Speech Logic: Restarting Listener...");
+                    } catch (e) {
+                        console.error("Speech Logic: Start Failed", e);
+                    }
+                }, 100);
             }
         }
-    }, [aiSpeaking, started, isMuted, listening]);
+    }, [aiSpeaking, started, isMuted]);
 
     // 8. Speech Recognition Error Handling
     useEffect(() => {
