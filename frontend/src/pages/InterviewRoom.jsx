@@ -346,14 +346,28 @@ export const InterviewRoom = () => {
             return;
         }
 
-        // Trigger 2: Silence Timer (Debounce) - if user pauses for 1s while still "listening"
+        // Trigger 2: Silence Timer (Debounce) - if user pauses for 2.5s while still "listening"
         const handler = setTimeout(() => {
             console.log("Silence detected - sending");
             sendTranscript();
-        }, 1000);
+        }, 2500);
 
         return () => clearTimeout(handler);
     }, [transcript, aiSpeaking, listening, resetTranscript, lastQuestion]);
+
+    // 11. Safety Timeout for Thinking State (to prevent hanging if backend fails)
+    useEffect(() => {
+        let safetyTimer;
+        if (aiThinking) {
+            safetyTimer = setTimeout(() => {
+                console.error("⚠️ AI Response Timeout - Resetting state");
+                setAiThinking(false);
+                setAiResponse("Sorry, the connection timed out. Please try again.");
+                speak("Sorry, the connection timed out. Please try again.");
+            }, 30000); // 30 seconds safety timeout
+        }
+        return () => clearTimeout(safetyTimer);
+    }, [aiThinking, speak]);
 
     // 10. Microphone Test Function
     const testMicrophone = async () => {
