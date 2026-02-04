@@ -28,11 +28,7 @@ export const useInterviewStore = create((set) => ({
             return response.data.interview_id;
         } catch (error) {
             console.error("Upload Error:", error);
-            if (error.code === 'ECONNABORTED') {
-                alert("Upload timed out. The server is taking too long to process your resume. Please try again.");
-            } else {
-                alert(`Upload failed: ${error.response?.data?.detail || error.message}`);
-            }
+            // Alerts removed in favor of Toast notifications handled by caller
             throw error;
         }
     },

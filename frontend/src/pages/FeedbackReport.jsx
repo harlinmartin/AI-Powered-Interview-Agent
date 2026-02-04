@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
-import { CheckCircle, AlertTriangle, BookOpen, ChevronLeft } from 'lucide-react';
+import { CheckCircle, AlertTriangle, BookOpen, ChevronLeft, UserCheck } from 'lucide-react';
 
 export const FeedbackReport = () => {
     const { id } = useParams();
@@ -55,6 +55,18 @@ export const FeedbackReport = () => {
         );
     }
 
+    // Check if data is incomplete (interview likely disconnected early)
+    if (data && (data.score === undefined || data.score === null)) {
+        return (
+            <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-8 text-center">
+                <div className="bg-yellow-500/10 p-4 rounded-full mb-4 text-yellow-500"><AlertTriangle size={40} /></div>
+                <h2 className="text-2xl font-bold mb-2">Incomplete Interview</h2>
+                <p className="text-gray-400 mb-6">This interview was disconnected before completion. No feedback data is available.</p>
+                <button onClick={() => navigate('/dashboard')} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition">Return to Dashboard</button>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-gray-950 text-white p-8">
             <div className="max-w-4xl mx-auto">
@@ -68,8 +80,8 @@ export const FeedbackReport = () => {
 
                     <div className="flex flex-col md:flex-row gap-8 items-center relative z-10">
                         <div className="text-center">
-                            <div className={`w-32 h-32 rounded-full flex items-center justify-center border-8 text-5xl font-bold shadow-lg ${data?.score >= 70 ? 'border-green-500 text-green-400 shadow-green-900/20' : 'border-yellow-500 text-yellow-400 shadow-yellow-900/20'}`}>
-                                {data?.score}
+                            <div className={`w-32 h-32 rounded-full flex items-center justify-center border-8 text-5xl font-bold shadow-lg ${data?.score >= 70 ? 'border-green-500 text-green-400 shadow-green-900/20' : data?.score > 0 ? 'border-yellow-500 text-yellow-400 shadow-yellow-900/20' : 'border-red-500 text-red-400 shadow-red-900/20'}`}>
+                                {data?.score ?? 'N/A'}
                             </div>
                             <p className="mt-2 text-gray-400 font-bold tracking-widest text-xs uppercase">Overall Score</p>
                         </div>
@@ -80,18 +92,23 @@ export const FeedbackReport = () => {
                     </div>
                 </div>
 
-                {/* Code Review Section (New) */}
-                {data?.code_feedback && (
+
+                {/* Code Review Section - Only show for coding rounds */}
+                {/* Detailed Feedback Section (Coding or Verbal) */}
+                {data?.code_feedback && !data.code_feedback.toLowerCase().includes('no code submitted') && (
                     <div className="bg-[#1e1e1e] rounded-3xl p-8 border border-gray-800 shadow-2xl mb-8">
                         <h3 className="text-xl font-bold text-blue-400 mb-4 flex items-center gap-2">
-                            <div className="p-2 bg-blue-900/30 rounded-lg"><BookOpen size={20} /></div>
-                            Code Quality Review
+                            <div className="p-2 bg-blue-900/30 rounded-lg">
+                                {data.feedback_type === 'VERBAL' ? <UserCheck size={20} /> : <BookOpen size={20} />}
+                            </div>
+                            {data.feedback_type === 'VERBAL' ? "Performance Analysis" : "Code Quality Review"}
                         </h3>
                         <div className="prose prose-invert max-w-none text-gray-300">
                             <p className="whitespace-pre-line leading-relaxed">{data.code_feedback}</p>
                         </div>
                     </div>
                 )}
+
 
 
                 {/* Grid Layout */}
@@ -103,12 +120,15 @@ export const FeedbackReport = () => {
                             <CheckCircle size={24} /> Key Strengths
                         </h3>
                         <ul className="space-y-3">
-                            {data?.strengths.map((s, i) => (
+                            {(data?.strengths || []).map((s, i) => (
                                 <li key={i} className="flex gap-3 text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
                                     <span className="text-green-500 font-bold">•</span>
                                     {s}
                                 </li>
                             ))}
+                            {(!data?.strengths || data.strengths.length === 0) && (
+                                <li className="text-gray-500 italic">No specific strengths listed.</li>
+                            )}
                         </ul>
                     </div>
 
@@ -118,12 +138,15 @@ export const FeedbackReport = () => {
                             <AlertTriangle size={24} /> Areas for Improvement
                         </h3>
                         <ul className="space-y-3">
-                            {data?.weaknesses.map((s, i) => (
+                            {(data?.weaknesses || []).map((w, i) => (
                                 <li key={i} className="flex gap-3 text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
                                     <span className="text-red-500 font-bold">•</span>
-                                    {s}
+                                    {w}
                                 </li>
                             ))}
+                            {(!data?.weaknesses || data.weaknesses.length === 0) && (
+                                <li className="text-gray-500 italic">No specific weaknesses listed.</li>
+                            )}
                         </ul>
                     </div>
 
@@ -133,11 +156,14 @@ export const FeedbackReport = () => {
                             <BookOpen size={24} /> Recommended Study Plan
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {data?.suggestions.map((s, i) => (
-                                <div key={i} className="bg-gray-900 p-4 rounded-xl border border-gray-800 hover:border-blue-500 transition">
+                            {(data?.suggestions || []).map((s, i) => (
+                                <div key={i} className="bg-gray-900 p-4 rounded-xl border border-blue-900/30 hover:border-blue-500 transition">
                                     <p className="text-gray-300 font-medium">{s}</p>
                                 </div>
                             ))}
+                            {(!data?.suggestions || data.suggestions.length === 0) && (
+                                <p className="text-gray-500 italic col-span-3 text-center">No specific study plan generated.</p>
+                            )}
                         </div>
                     </div>
 

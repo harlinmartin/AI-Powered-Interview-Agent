@@ -73,7 +73,7 @@ async def upload_interview_files(
             round_type=round_type,
             difficulty=difficulty,
             status="PROCESSING",
-            created_at=datetime.datetime.now().isoformat()
+            created_at=datetime.datetime.utcnow().isoformat() + 'Z'
         )
         db.add(new_interview)
         with open("/tmp/debug_upload.log", "a") as f: f.write("Check: Before Commit\n")
@@ -83,6 +83,39 @@ async def upload_interview_files(
         
         # Read file content to memory
         content = await resume.read()
+
+        # Validate Content (Synchronous Check)
+        import io
+        import pypdf
+        text_content = ""
+        try:
+             if resume.filename.endswith(".pdf"):
+                 pdf_reader = pypdf.PdfReader(io.BytesIO(content))
+                 if len(pdf_reader.pages) == 0:
+                      raise Exception("Empty PDF")
+                 for page in pdf_reader.pages:
+                     text_content += page.extract_text() or ""
+             else:
+                 # Ensure images are at least valid bytes (simplified check)
+                 if len(content) < 100:
+                      raise Exception("File too small")
+                 # For images, we trust Vision LLM in background, or we can't easily validate text sync without latency
+                 text_content = "IMAGE_CONTENT_PENDING" 
+
+             if len(text_content.strip()) < 50 and resume.filename.endswith(".pdf"):
+                 raise HTTPException(status_code=400, detail="Invalid Resume: The PDF seems empty or unreadable (scanned?). Please upload a text-based PDF.")
+
+             # Keyword Check to ensure it's a resume
+             if resume.filename.endswith(".pdf"):
+                 keywords = ["education", "experience", "skills", "project", "resume", "cv", "employment", "summary", "profile", "technical", "work"]
+                 if not any(k in text_content.lower() for k in keywords):
+                      raise HTTPException(status_code=400, detail="Invalid Document. Please upload a valid resume.")
+
+        except HTTPException:
+             raise
+        except Exception as e:
+             print(f"Validation Error: {e}")
+             raise HTTPException(status_code=400, detail="Invalid File: Could not read document. Please ensure it is a valid PDF.")
         
         # Offload all processing to background task
         background_tasks.add_task(process_resume_background, new_interview.id, content, resume.filename)
@@ -214,7 +247,13 @@ def _optimize_resume_sync(content: bytes, filename: str, job_description: str, d
 
         if not resume_text or len(resume_text.strip()) < 50:
              print("DEBUG: Resume text extraction failed or empty")
-             return {"error": "Could not extract text from file"}
+             raise HTTPException(status_code=400, detail="Invalid Document: Could not extract sufficient text. Please ensure the file is readable.")
+
+        # Keyword Validation
+        keywords = ["education", "experience", "skills", "project", "resume", "cv", "employment", "summary", "profile", "technical", "work"]
+        if not any(k in resume_text.lower() for k in keywords):
+             print("DEBUG: No resume keywords found")
+             raise HTTPException(status_code=400, detail="Invalid Document. Please upload a valid resume.")
         
         print(f"DEBUG: Text extracted ({len(resume_text)} chars). Calling LLM...")
 
@@ -294,6 +333,8 @@ async def optimize_resume(
         
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         import datetime
@@ -431,13 +472,17 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
                     
                     continue # Continue listening
 
+                # Extract last question from frontend (if provided)
+                last_question = data.get('last_question', None)
+
                 ai_text = llm_service.generate_response(
                     user_message=user_text,
                     context=context,
                     job_description=interview.job_description,
                     history=history,
                     round_type=interview.round_type,
-                    difficulty=interview.difficulty
+                    difficulty=interview.difficulty,
+                    last_question=last_question  # Pass for validation
                 )
                 
                 # 4. Save AI Response
