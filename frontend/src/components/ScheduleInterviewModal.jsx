@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, CheckCircle2, Briefcase, FileText, Calendar, ArrowRight, ArrowLeft } from 'lucide-react';
 import { COMPANIES, ROUND_TYPES, EXPERIENCE_LEVELS, ROLES } from '../utils/constants';
+import { useToast } from '../contexts/ToastContext';
 
 export const ScheduleInterviewModal = ({ isOpen, onClose, onStart }) => {
+    const { error: toastError } = useToast();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
 
@@ -239,8 +241,22 @@ ${ROLES[formData.position] || 'Standard interview process.'}
                                 <div className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center hover:bg-gray-50 transition cursor-pointer relative h-64 flex flex-col items-center justify-center">
                                     <input
                                         type="file"
-                                        accept=".pdf"
-                                        onChange={(e) => setFormData({ ...formData, file: e.target.files?.[0] })}
+                                        accept=".pdf,image/png,image/jpeg"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+                                                if (!validTypes.includes(file.type)) {
+                                                    toastError("Invalid file type. Please upload a PDF or Image.");
+                                                    return;
+                                                }
+                                                if (file.size > 5 * 1024 * 1024) {
+                                                    toastError("File too large. Max 5MB.");
+                                                    return;
+                                                }
+                                                setFormData({ ...formData, file });
+                                            }
+                                        }}
                                         className="absolute inset-0 opacity-0 cursor-pointer"
                                     />
                                     {formData.file ? (

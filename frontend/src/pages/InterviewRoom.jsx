@@ -6,7 +6,7 @@ import { useTTS } from '../hooks/useTTS';
 import { useAuthStore } from '../store/useAuthStore';
 import {
     Mic, MicOff, PhoneOff, Video, VideoOff,
-    Monitor, Captions, PlayCircle, Code
+    Monitor, Captions, PlayCircle, Code, Sparkles
 } from 'lucide-react';
 import { ProfessionalWorkspace } from '../components/ProfessionalWorkspace';
 
@@ -36,9 +36,10 @@ export const InterviewRoom = () => {
     });
 
     // Voice Hooks
-    const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition();
+    const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition, isMicrophoneAvailable } = useSpeechRecognition();
     const { speak, cancel: cancelTTS, speaking: aiSpeaking } = useTTS();
     const [aiResponse, setAiResponse] = useState("Connected. Waiting for you to start...");
+    const [lastQuestion, setLastQuestion] = useState(null); // NEW: Track last AI question for validation
 
     // Timers
     const [remainingTime, setRemainingTime] = useState(600);
@@ -60,6 +61,16 @@ export const InterviewRoom = () => {
         const interval = setInterval(() => setRemainingTime(t => Math.max(0, t - 1)), 1000);
         return () => clearInterval(interval);
     }, [started, remainingTime]);
+
+    // Auto-end interview when timer hits 0
+    useEffect(() => {
+        if (remainingTime === 0 && started) {
+            console.log('⏰ Timer reached 0 - Auto-ending interview');
+            setTimeout(() => {
+                handleEndInterview();
+            }, 1000); // 1 second delay to show 00:00
+        }
+    }, [remainingTime, started]);
 
     // 3. Think Time
     useEffect(() => {
@@ -84,6 +95,7 @@ export const InterviewRoom = () => {
                         setIsScreenSharing(false);
                     };
                 } else {
+                    // Reverting to audio: false to prevent Linux device conflict with Web Speech API
                     stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                 }
 
@@ -124,14 +136,45 @@ export const InterviewRoom = () => {
         socket.onopen = () => {
             console.log("WS Connected");
             setWsStatus("Connected");
+
+            // HEARTBEAT: Keep connection alive every 10 seconds
+            wsRef.current.pingInterval = setInterval(() => {
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: "ping" }));
+                }
+            }, 10000);
         };
 
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === 'ai_response') {
+                setAiThinking(false); // Stop thinking animation
                 setAiResponse(data.content);
+                setLastQuestion(data.content); // Track the question for validation
                 speak(data.content);
                 setThinkTime(10);
+
+                // Check if AI is concluding the interview
+                const conclusionPhrases = [
+                    'concludes our interview',
+                    'that concludes the interview',
+                    'thank you for your time',
+                    'we are done',
+                    'interview is complete',
+                    'that wraps up'
+                ];
+
+                const isConclusion = conclusionPhrases.some(phrase =>
+                    data.content.toLowerCase().includes(phrase)
+                );
+
+                if (isConclusion) {
+                    console.log('🎯 AI concluded interview early');
+                    // Wait 3 seconds for user to hear the conclusion, then auto-end
+                    setTimeout(() => {
+                        handleEndInterview();
+                    }, 3000);
+                }
             }
 
             if (data.type === 'coding_assessment') {
@@ -183,6 +226,7 @@ export const InterviewRoom = () => {
         socket.onclose = () => {
             console.log("WS Disconnected");
             setWsStatus("Disconnected");
+            if (wsRef.current?.pingInterval) clearInterval(wsRef.current.pingInterval);
         };
 
         socket.onerror = (err) => {
@@ -191,7 +235,10 @@ export const InterviewRoom = () => {
         };
 
         wsRef.current = socket;
-        return () => socket.close();
+        return () => {
+            if (wsRef.current?.pingInterval) clearInterval(wsRef.current.pingInterval);
+            socket.close();
+        };
     }, [id, token, speak, navigate, started]);
 
     // 7. Speech Logic
@@ -205,37 +252,89 @@ export const InterviewRoom = () => {
         } else {
             if (!isMuted && !listening) {
                 try {
+                    // Force en-US and continuous
                     SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
-                    console.log("Speech Logic: Started Listening");
+                    console.log("Speech Logic: Restarting Listener...");
                 } catch (e) {
                     console.error("Speech Logic: Start Failed", e);
                 }
-            } else if (isMuted) {
-                SpeechRecognition.stopListening();
             }
         }
     }, [aiSpeaking, started, isMuted, listening]);
 
-    // 8. Transcript Sender
+    // 8. Speech Recognition Error Handling
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        if (transcript) setThinkTime(prev => prev === 0 ? prev : 0);
+        if (!browserSupportsSpeechRecognition) return;
+
+        const recognition = SpeechRecognition.getRecognition();
+        if (!recognition) return;
+
+        recognition.onerror = (event) => {
+            console.error('🔴 Speech Recognition Error:', event.error, event.message);
+            if (event.error === 'no-speech') {
+                console.log('No speech detected - this is normal during silence');
+            } else if (event.error === 'audio-capture') {
+                console.error('CRITICAL: Microphone not accessible!');
+            } else if (event.error === 'not-allowed') {
+                console.error('CRITICAL: Microphone permission denied!');
+            }
+        };
+
+        recognition.onend = () => {
+            console.log('🔵 Speech Recognition Ended - Auto-restarting...');
+            if (started && !aiSpeaking && !isMuted) {
+                setTimeout(() => {
+                    SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
+                }, 100);
+            }
+        };
+
+        return () => {
+            if (recognition) {
+                recognition.onerror = null;
+                recognition.onend = null;
+            }
+        };
+    }, [browserSupportsSpeechRecognition, started, aiSpeaking, isMuted]);
+
+    // 9. Transcript Sender (Fixed)
+    useEffect(() => {
+        if (!transcript || transcript.trim().length < 3) return;
+        if (aiSpeaking || !listening) return;
 
         const handler = setTimeout(() => {
-            if (transcript && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                setAiThinking(true); // START THINKING
-                wsRef.current.send(JSON.stringify({ type: 'user_audio_text', content: transcript }));
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+                console.log('📤 Sending transcript:', transcript);
+                setAiThinking(true);
+                wsRef.current.send(JSON.stringify({
+                    type: 'user_audio_text',
+                    content: transcript,
+                    last_question: lastQuestion  // Send for validation
+                }));
                 resetTranscript();
             }
-        }, 1200); // Reduced debounce to 1.2s for faster response
+        }, 5000); // 5 seconds silence before submitting answer (allows thinking pauses)
 
         return () => clearTimeout(handler);
-    }, [transcript, resetTranscript]);
+    }, [transcript, aiSpeaking, listening, resetTranscript]);
 
+    // 10. Microphone Test Function
+    const testMicrophone = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log('✅ Microphone Test: SUCCESS', stream.getAudioTracks());
+            const tracks = stream.getAudioTracks();
+            alert(`Microphone is working!\nDevice: ${tracks[0]?.label || 'Unknown'}`);
+            stream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+            console.error('❌ Microphone Test: FAILED', err);
+            alert(`Microphone Error: ${err.message}\n\nPlease check browser permissions.`);
+        }
+    };
 
     // ================= RENDER =================
 
-    console.log("RENDER DEBUG:", { started, browserSupportsSpeechRecognition });
+    console.log("RENDER DEBUG:", { started, browserSupportsSpeechRecognition, listening, transcript });
 
     if (!browserSupportsSpeechRecognition) return <div className="p-10 text-white">Browser doesn't support speech recognition. Use Chrome.</div>;
 
@@ -297,53 +396,100 @@ export const InterviewRoom = () => {
     };
 
     return (
-        <div className="flex flex-col md:flex-row h-screen bg-gray-950 text-white p-4 gap-4 overflow-hidden relative">
+        <div className="flex flex-col md:flex-row h-screen bg-theme-bg text-slate-900 p-6 gap-6 overflow-hidden relative">
 
             {/* LEFT: AI & Info */}
-            <div className={`${showCodeEditor ? 'w-1/5' : 'w-1/3'} flex flex-col gap-4 transition-all duration-300 hidden md:flex`}>
-                <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800 flex-1 flex flex-col justify-center items-center relative shadow-inner">
-                    {/* Think Buffer */}
-                    {aiThinking && (
-                        <div className="absolute top-4 left-4 right-4 bg-blue-950/50 rounded-lg p-2 text-center border border-blue-900/50 animate-pulse">
-                            <span className="text-xs font-bold text-blue-300">AI is thinking...</span>
-                        </div>
-                    )}
+            {/* LEFT: AI & Info */}
+            <div className={`${showCodeEditor ? 'w-full md:w-1/5' : 'w-full md:w-1/3'} flex flex-col gap-6 transition-all duration-300 flex`}>
+                <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 flex-1 flex flex-col justify-center items-center relative shadow-xl overflow-hidden">
 
-                    <div className={`rounded-full flex items-center justify-center transition-all duration-500 ${aiSpeaking ? 'bg-blue-600 scale-105 shadow-[0_0_50px_blue]' : aiThinking ? 'bg-purple-600 animate-bounce' : 'bg-gray-800'} ${showCodeEditor ? 'w-24 h-24 text-2xl' : 'w-56 h-56 text-7xl'}`}>
-                        {aiSpeaking ? '🔊' : aiThinking ? '💭' : '🤖'}
+                    {/* Background Gradients */}
+                    <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+                        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl transition-all duration-700 ${aiSpeaking ? 'bg-blue-500/20 scale-150' : ''}`}></div>
                     </div>
 
-                    <div className="text-center w-full mt-6">
-                        <h3 className="text-xl font-bold text-white">AI Interviewer</h3>
+                    {/* AI CORE VISUALIZATION */}
+                    <div className="relative z-10 flex flex-col items-center justify-center flex-1">
 
-                        {/* LISTENING INDICATOR */}
-                        <div className="flex justify-center items-center gap-2 mt-2 h-6">
-                            {listening ? (
-                                <>
-                                    <span className="relative flex h-3 w-3">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                        {/* The Orb */}
+                        <div className={`relative flex items-center justify-center transition-all duration-500 ${showCodeEditor ? 'w-32 h-32' : 'w-64 h-64'}`}>
+                            {/* Outer Glow Ring */}
+                            <div className={`absolute inset-0 rounded-full border-2 transition-all duration-500 ${aiSpeaking ? 'border-blue-400/30 scale-110 animate-pulse' :
+                                aiThinking ? 'border-purple-400/30 scale-100 animate-spin-slow' :
+                                    listening ? 'border-red-400/30 scale-105' :
+                                        'border-cyan-400/10 scale-100'
+                                }`}></div>
+
+                            {/* Inner Core */}
+                            <div className={`w-full h-full rounded-full shadow-[inset_0_0_40px_rgba(0,0,0,0.5)] flex items-center justify-center relative overflow-hidden transition-all duration-500 ${aiSpeaking ? 'bg-gradient-to-br from-blue-600 to-indigo-600 shadow-[0_0_60px_rgba(59,130,246,0.6)] animate-pulse-fast' :
+                                aiThinking ? 'bg-gradient-to-br from-purple-600 to-fuchsia-600 shadow-[0_0_40px_rgba(147,51,234,0.5)] animate-pulse' :
+                                    listening ? 'bg-gradient-to-br from-rose-600 to-red-600 shadow-[0_0_40px_rgba(225,29,72,0.5)]' :
+                                        'bg-gradient-to-br from-slate-700 to-slate-800 shadow-[0_0_30px_rgba(148,163,184,0.1)]'
+                                }`}>
+                                <span className="absolute top-2 text-[8px] text-white/20 font-mono">v2.1 LIVE</span>
+                                {/* Core Highlight */}
+                                <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/10 to-transparent"></div>
+
+                                {/* Status Icon Overlay */}
+                                <div className={`text-white transition-all duration-300 ${aiSpeaking || aiThinking ? 'opacity-80 scale-110' : 'opacity-40 scale-100'}`}>
+                                    {aiSpeaking ? <Sparkles size={showCodeEditor ? 32 : 64} className="animate-spin-slow" /> :
+                                        aiThinking ? <Sparkles size={showCodeEditor ? 32 : 64} className="animate-bounce" /> :
+                                            listening ? <div className="w-4 h-4 rounded-full bg-white animate-ping" /> :
+                                                <div className="w-20 h-1 bg-white/20 rounded-full" />
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Status Text & Indicators */}
+                        <div className="text-center mt-12 space-y-4">
+                            <h3 className="text-2xl font-bold text-white tracking-tight">AI Interviewer</h3>
+
+                            <div className="h-8 flex justify-center items-center">
+                                {aiThinking && (
+                                    <span className="flex items-center gap-2 text-purple-300 font-medium animate-pulse bg-purple-500/10 px-4 py-1.5 rounded-full border border-purple-500/20 text-sm">
+                                        <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
+                                        Processing Result...
                                     </span>
-                                    <span className="text-xs text-red-400 font-mono animate-pulse">LISTENING...</span>
-                                </>
-                            ) : (
-                                <span className="text-xs text-gray-500 font-mono">Mic Inactive</span>
-                            )}
+                                )}
+                                {listening && !aiThinking && (
+                                    <span className="flex items-center gap-2 text-rose-400 font-medium animate-pulse bg-rose-500/10 px-4 py-1.5 rounded-full border border-rose-500/20 text-sm">
+                                        <div className="w-2 h-2 bg-rose-500 rounded-full animate-ping"></div>
+                                        Listening to you...
+                                    </span>
+                                )}
+                                {!listening && !aiThinking && !aiSpeaking && (
+                                    <span className="text-slate-500 text-sm font-medium">Ready</span>
+                                )}
+                                {aiSpeaking && (
+                                    <span className="text-blue-300 text-sm font-medium animate-pulse">Speaking...</span>
+                                )}
+                            </div>
                         </div>
+                    </div>
 
-                        <div className="min-h-[4rem] flex flex-col items-center justify-center">
-                            {showCaptions && (
-                                <p className="text-gray-300 text-sm italic px-2 mt-2 h-20 overflow-y-auto custom-scrollbar">"{aiResponse}"</p>
-                            )}
-                        </div>
+                    {/* Captions / Subtitles Area */}
+                    <div className="w-full mt-6 min-h-[5rem] flex flex-col items-center justify-end relative z-10">
+                        {showCaptions && aiResponse && (
+                            <div className="bg-black/40 backdrop-blur-md rounded-xl p-4 border border-white/10 w-full">
+                                <p className="text-white/90 text-sm text-center font-medium leading-relaxed">"{aiResponse}"</p>
+                            </div>
+                        )}
                         {!aiSpeaking && (
-                            <div className="flex flex-col gap-2">
-                                <button onClick={() => speak(aiResponse)} className="mt-2 text-xs text-blue-400 hover:underline flex items-center gap-1 mx-auto">
-                                    <PlayCircle size={12} /> Replay Audio
+                            <div className="flex justify-center mt-2 items-center gap-2">
+                                <button onClick={() => speak(aiResponse)} className="text-xs text-slate-500 hover:text-white transition-colors flex items-center gap-1">
+                                    <PlayCircle size={12} /> Replay
                                 </button>
                                 {transcript && (
-                                    <span className="text-xs text-green-400 font-mono animate-pulse">Hearing: "{transcript}"</span>
+                                    <span className="ml-3 text-xs text-slate-700 truncate max-w-[150px]">Last heard: "{transcript}"</span>
                                 )}
+                                {/* Manual Mic Reset for debugging - ALWAYS VISIBLE */}
+                                <button
+                                    onClick={() => SpeechRecognition.startListening({ continuous: true, language: 'en-US' })}
+                                    className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 border border-red-500/20 px-2 py-1 rounded"
+                                >
+                                    <MicOff size={10} /> Reset Mic
+                                </button>
                             </div>
                         )}
                     </div>
@@ -360,7 +506,7 @@ export const InterviewRoom = () => {
 
             {/* MIDDLE: Code Editor (Conditional) */}
             {showCodeEditor && (
-                <div className="flex-[2] rounded-2xl flex flex-col overflow-hidden animate-fade-in-up shadow-2xl z-10 h-full">
+                <div className="flex-[2] rounded-[2.5rem] flex flex-col overflow-hidden animate-fade-in-up shadow-soft z-10 h-full bg-white border border-white/60">
                     <ProfessionalWorkspace
                         items={questions}
                         activeTab={activeCodeTab}
@@ -374,7 +520,7 @@ export const InterviewRoom = () => {
             )}
 
             {/* RIGHT: User Video & Controls */}
-            <div className="flex-1 bg-black rounded-2xl overflow-hidden relative border border-gray-800 flex flex-col shadow-2xl min-h-0">
+            <div className="flex-1 bg-black rounded-[2.5rem] overflow-hidden relative border border-white/60 flex flex-col shadow-soft min-h-0">
                 <div className="relative flex-1 bg-gray-900 min-h-0">
                     <video ref={videoRef} autoPlay muted playsInline className={`w-full h-full object-cover ${!isScreenSharing ? 'transform scale-x-[-1]' : ''}`} />
 
@@ -390,6 +536,7 @@ export const InterviewRoom = () => {
                         </div>
                     )}
 
+
                     {/* WS Status Overlay (Debug) */}
                     <div className="absolute top-4 right-4 z-20">
                         <span className={`px-2 py-1 rounded text-xs font-bold ${wsStatus === 'Connected' ? 'bg-green-500/20 text-green-400' :
@@ -400,18 +547,22 @@ export const InterviewRoom = () => {
                     </div>
 
                     {/* Captions Overlay */}
-                    {showCaptions && transcript && (
-                        <div className="absolute bottom-32 left-1/2 transform -translate-x-1/2 w-4/5 text-center px-4">
-                            <span className="bg-black/80 text-blue-300 px-3 py-1 rounded-t-lg text-[10px] font-bold uppercase tracking-widest border-t border-x border-white/10">Scanning Audio</span>
-                            <div className="bg-black/80 px-4 py-3 rounded-xl rounded-t-none backdrop-blur-md border border-white/10 text-lg font-medium text-white shadow-xl">
-                                {transcript}
+                    {showCaptions && (
+                        <div className="absolute bottom-32 left-1/2 transform -translate-x-1/2 w-4/5 text-center px-4 z-50">
+                            <div className={`transition-all duration-300 ${listening ? 'opacity-100' : 'opacity-50'}`}>
+                                <span className="bg-black/80 text-blue-300 px-3 py-1 rounded-t-lg text-[10px] font-bold uppercase tracking-widest border-t border-x border-white/10">
+                                    {listening ? "Live Transcription" : "Mic Paused"}
+                                </span>
+                                <div className="bg-black/80 px-4 py-3 rounded-xl rounded-t-none backdrop-blur-md border border-white/10 text-lg font-medium text-white shadow-xl min-h-[3rem] flex items-center justify-center">
+                                    {transcript ? transcript : <span className="text-gray-500 italic text-sm">Listening for speech...</span>}
+                                </div>
                             </div>
                         </div>
                     )}
                 </div>
 
                 {/* BOTTOM CONTROLS BAR */}
-                <div className="h-24 bg-gray-900 border-t border-gray-800 flex items-center justify-center gap-4 px-6 flex-shrink-0 z-50">
+                <div className="h-auto md:h-24 py-4 md:py-0 bg-gray-900 border-t border-gray-800 flex flex-wrap md:flex-nowrap items-center justify-center gap-4 px-6 flex-shrink-0 z-50">
 
                     {/* Mic Toggle */}
                     <button
