@@ -336,7 +336,7 @@ export const InterviewRoom = () => {
                 }));
                 resetTranscript();
             }
-        }, 5000); // 5 seconds silence before submitting answer (allows thinking pauses)
+        }, 1500); // Reduced to 1.5s for better responsiveness
 
         return () => clearTimeout(handler);
     }, [transcript, aiSpeaking, listening, resetTranscript]);
