@@ -45,9 +45,8 @@ def get_user_analytics(
             feedback = json.loads(inv.feedback_result)
             score = feedback.get("score", 0)
             
-            # Skip interviews with 0 score (incomplete/test sessions)
-            if score == 0:
-                continue
+            # Allow 0 scores (failed interviews are part of history)
+            # if score == 0: continue
                 
             metrics = feedback.get("metrics", {})
             
@@ -70,14 +69,20 @@ def get_user_analytics(
             # Date Formatting
             date_str = inv.created_at
             try:
-                date_obj = datetime.fromisoformat(date_str)
-                display_date = date_obj.strftime("%b %d")
+                # Fix: Add 'Z' if missing (old interviews without timezone marker)
+                if date_str and not date_str.endswith('Z') and '+' not in date_str:
+                    date_str += 'Z'
+                    
+                date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))  # Parse as UTC
+                display_date = date_obj.strftime("%b %d %H:%M")
             except:
                 display_date = "Unknown"
+                date_str = inv.created_at  # Keep original for sorting
                 
             # Add to History
             history_data.append({
                 "date": display_date,
+                "timestamp": inv.created_at if inv.created_at else "",  # Original timestamp for sorting
                 "score": score,
                 "role": category,
                 "title": role
@@ -102,9 +107,9 @@ def get_user_analytics(
             continue
             
     # Final Calculations
-    history_data.sort(key=lambda x: x['date']) # Basic sort, might need refinement if dates same
+    history_data.sort(key=lambda x: x['timestamp']) # Sort chronologically by ISO timestamp
     
-    avg_score = round(total_score_sum / len(interviews)) if interviews else 0
+    avg_score = round(total_score_sum / len(history_data)) if history_data else 0
     
     role_stats = []
     for role, data in role_map.items():
