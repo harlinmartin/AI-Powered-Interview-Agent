@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, CheckCircle, Save, Settings, Maximize2, RotateCcw, Copy, Check } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
 
 export const ProfessionalWorkspace = ({
     items = {
@@ -24,6 +25,7 @@ export const ProfessionalWorkspace = ({
     const currentItem = safeItems[activeTab] || safeItems['q1'];
     const [theme, setTheme] = useState('vs-dark'); // vs-dark, light
     const textareaRef = useRef(null);
+    const { success } = useToast();
 
     // Line Numbers Logic
     const getLineNumbers = (code) => {
@@ -96,7 +98,12 @@ export const ProfessionalWorkspace = ({
 
 
                     <button
-                        onClick={() => onSubmit && onSubmit(currentItem)}
+                        onClick={() => {
+                            if (onSubmit) {
+                                onSubmit(currentItem);
+                                success('Code submitted successfully!');
+                            }
+                        }}
                         className="flex items-center gap-1.5 px-3 py-1 bg-green-700 hover:bg-green-600 text-white rounded text-xs font-medium transition-colors"
                     >
                         <CheckCircle size={12} />

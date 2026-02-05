@@ -7,7 +7,7 @@ import { useDeepgramSpeech } from '../hooks/useDeepgramSpeech';
 import { useAuthStore } from '../store/useAuthStore';
 import {
     Mic, MicOff, PhoneOff, Video, VideoOff,
-    Monitor, Captions, PlayCircle, Code, Sparkles
+    Monitor, Captions, PlayCircle, Code, Sparkles, ArrowLeft
 } from 'lucide-react';
 import { ProfessionalWorkspace } from '../components/ProfessionalWorkspace';
 
@@ -19,6 +19,7 @@ export const InterviewRoom = () => {
 
     const [wsStatus, setWsStatus] = useState("Disconnected"); // Added WS Status
     const [mediaError, setMediaError] = useState(null); // Added Media Error
+    const [mediaStream, setMediaStream] = useState(null); // NEW: Shared Media Stream
 
     // UX State
     const [started, setStarted] = useState(false);
@@ -64,7 +65,8 @@ export const InterviewRoom = () => {
             console.error("❌ Deepgram error, falling back to Web Speech API:", error);
             setDeepgramError(error);
             setUseDeepgram(false); // Fallback to Web Speech API
-        }
+        },
+        mediaStream // NEW: Pass the shared stream
     );
 
     // Timers
@@ -121,13 +123,14 @@ export const InterviewRoom = () => {
                         setIsScreenSharing(false);
                     };
                 } else {
-                    // Reverting to audio: false to prevent Linux device conflict with Web Speech API
-                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                    // CHANGED: Request audio: true to share stream with Deepgram
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 }
 
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream;
                 }
+                setMediaStream(stream); // Store stream for Deepgram
             } catch (err) {
                 console.error("Media Error:", err);
                 setMediaError("Could not access Camera/Microphone. Please allow permissions.");
@@ -146,6 +149,8 @@ export const InterviewRoom = () => {
                     console.log(`Cleanup: Stopped ${track.kind} track`);
                 });
             }
+            // Explicitly clear stream state
+            setMediaStream(null);
         };
     }, [started, isScreenSharing]);
 
@@ -444,6 +449,15 @@ export const InterviewRoom = () => {
             <div className="flex bg-gray-900 h-screen items-center justify-center p-4">
                 <div className="bg-gray-800 p-10 rounded-2xl text-center shadow-2xl border border-gray-700 max-w-lg w-full relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-2 bg-blue-500"></div>
+
+                    {/* Back Button */}
+                    <button
+                        onClick={() => navigate('/dashboard')}
+                        className="absolute top-4 left-4 text-gray-400 hover:text-white flex items-center gap-1 transition-colors text-sm"
+                    >
+                        <ArrowLeft size={16} /> Back
+                    </button>
+
                     <div className="mb-6 bg-blue-900/30 w-20 h-20 rounded-full flex items-center justify-center mx-auto text-blue-400">
                         <Mic size={40} />
                     </div>
