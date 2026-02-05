@@ -397,7 +397,12 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
                 user = db.query(models.User).filter(models.User.email == email).first()
                 if user and user.full_name:
                     first_name = user.full_name.split()[0]
-                    initial_msg = f"Hi {first_name}, let's start the interview."
+                    
+                    # Custom Greeting for HR vs Technical
+                    if interview.round_type and interview.round_type.strip() == "HR Round":
+                        initial_msg = f"Hi {first_name}, welcome to the HR round. To get started, could you please give me a brief introduction about yourself?"
+                    else:
+                        initial_msg = f"Hi {first_name}, let's start the interview."
             except Exception as e:
                 print(f"WS Greeting Error: {e}")
 
