@@ -180,9 +180,7 @@ export const Dashboard = () => {
             <aside className={`w-64 bg-theme-surface flex flex-col fixed h-full z-30 shadow-soft transition-transform duration-300 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="h-20 flex items-center justify-between px-8 gap-3">
                     <div className="flex items-center gap-2">
-                        <div className="bg-blue-600 text-white p-2 rounded-2xl shadow-lg shadow-blue-500/30">
-                            <Briefcase size={22} />
-                        </div>
+                        <img src="/logo.png" alt="ElevateAI Logo" className="w-10 h-10 object-contain" />
                         <span className="font-bold text-xl tracking-tight text-slate-800">ElevateAI</span>
                     </div>
                     <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-500 hover:text-slate-800">
