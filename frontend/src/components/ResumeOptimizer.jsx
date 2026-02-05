@@ -301,6 +301,25 @@ export const ResumeOptimizer = () => {
                                             </div>
                                         )}
 
+                                        {/* Formatting & Experience Issues */}
+                                        {result.formatting_issues && result.formatting_issues.length > 0 && (
+                                            <div>
+                                                <h3 className="text-amber-500 text-xs font-bold uppercase tracking-wider flex items-center gap-2 mb-3 mt-6">
+                                                    <AlertTriangle size={14} /> Formatting & Experience Issues
+                                                </h3>
+                                                <div className="flex flex-col gap-2">
+                                                    {result.formatting_issues.map((issue, i) => (
+                                                        <div key={i} className="flex items-start gap-2 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg p-3 text-sm font-medium">
+                                                            <div className="mt-0.5 min-w-[16px]">
+                                                                <AlertTriangle size={14} />
+                                                            </div>
+                                                            <span>{issue}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Parsed Sections */}
                                         <div className="space-y-2">
                                             <h3 className="text-blue-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2 mt-6">
