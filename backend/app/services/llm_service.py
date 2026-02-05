@@ -482,6 +482,7 @@ Responsibilities include tasks typical for {role_name} positions."""
            - **-10 points** for EACH missing "Hard Skill" required in the JD.
            - **-15 points** if Bullet points lack numbers/metrics (e.g., "Worked on API" vs "Built API handling 10k req/s").
            - **-20 points** if formatting/structure is cluttered or hard to parse.
+           - **-20 points** if "Years of Experience Mismatch" (e.g., JD requires 3+ years, Resume has significantly less, like <1 year).
            - **-50 points** if the Resume Role does not match the JD Role (e.g., Java Dev applying for Frontend).
 
         5. **OUTPUT**:
