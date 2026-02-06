@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { AudioVisualizer } from '../components/AudioVisualizer';
+
 import { useParams, useNavigate } from 'react-router-dom';
 import 'regenerator-runtime/runtime'; // Polyfill for SpeechRecognition
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
@@ -404,7 +406,7 @@ export const InterviewRoom = () => {
         const handler = setTimeout(() => {
             console.log("Silence detected - sending");
             sendTranscript();
-        }, 5000); // 5 seconds - allows thinking pauses without interruption
+        }, 4000); // 4 seconds - adjusted per user preference
 
         return () => clearTimeout(handler);
     }, [transcript, deepgramTranscript, useDeepgram, aiSpeaking, listening, resetTranscript, lastQuestion]);
@@ -548,6 +550,13 @@ export const InterviewRoom = () => {
 
                         {/* The Orb */}
                         <div className={`relative flex items-center justify-center transition-all duration-500 ${showCodeEditor ? 'w-32 h-32' : 'w-64 h-64'}`}>
+                            
+                            {/* Audio Visualizer Overlay */}
+                            {mediaStream && !aiSpeaking && !aiThinking && (
+                                <div className="absolute inset-0 z-30 flex items-center justify-center scale-150">
+                                    <AudioVisualizer stream={mediaStream} isAiSpeaking={aiSpeaking} />
+                                </div>
+                            )}
                             {/* Outer Glow Ring */}
                             <div className={`absolute inset-0 rounded-full border-2 transition-all duration-500 ${aiSpeaking ? 'border-blue-400/30 scale-110 animate-pulse' :
                                 aiThinking ? 'border-purple-400/30 scale-100 animate-spin-slow' :
@@ -622,12 +631,13 @@ export const InterviewRoom = () => {
                                     </span>
                                 )}
                                 {/* Manual Mic Reset for debugging - ALWAYS VISIBLE */}
-                                <button
+                                {/* Manual Mic Reset Hidden for Polish */}
+                                {/* <button
                                     onClick={() => SpeechRecognition.startListening({ continuous: true, language: 'en-US' })}
                                     className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 border border-red-500/20 px-2 py-1 rounded"
                                 >
                                     <MicOff size={10} /> Reset Mic
-                                </button>
+                                </button> */}
 
                                 {/* Fallback Toggle for Mobile */}
                                 <button
