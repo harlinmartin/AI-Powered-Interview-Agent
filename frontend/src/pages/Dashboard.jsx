@@ -6,10 +6,11 @@ import { useNavigate } from 'react-router-dom';
 import {
     Briefcase, Plus, Clock, ChevronRight,
     BarChart3, FileSearch, LogOut, Sparkles, User, ShieldAlert, Search,
-    Upload, Home, MoreHorizontal, Settings, Calendar, CheckCircle2
+    Upload, Home, MoreHorizontal, Settings, Calendar, CheckCircle2, Brain
 } from 'lucide-react';
 import { ResumeOptimizer } from '../components/ResumeOptimizer';
 import { AnalyticsDashboard } from '../components/AnalyticsDashboard';
+import { StartQuizModal } from '../components/StartQuizModal';
 import { ScheduleInterviewModal } from '../components/ScheduleInterviewModal';
 
 import { COMPANIES, ROLES, EXPERIENCE_LEVELS } from '../utils/constants';
@@ -25,6 +26,7 @@ export const Dashboard = () => {
 
     const [currentTab, setCurrentTab] = useState('home');
     const [showModal, setShowModal] = useState(false);
+    const [showQuizModal, setShowQuizModal] = useState(false);
     const [loading, setLoading] = useState(false);
 
     // Settings State
@@ -144,7 +146,11 @@ export const Dashboard = () => {
         try {
             const id = await uploadResume(file, compositeJD, roundType, difficulty);
             setCurrentInterviewId(id);
-            navigate(`/interview/${id}`);
+            if (roundType === 'Tailored Quiz') {
+                navigate(`/quiz/${id}`);
+            } else {
+                navigate(`/interview/${id}`);
+            }
         } catch (err) {
             console.error(err);
             const errorMsg = err.response?.data?.detail || "Upload failed. Please check your file.";
@@ -205,6 +211,10 @@ export const Dashboard = () => {
                         <FileSearch size={20} />
                         Resume Optimization
                     </button>
+                    <button onClick={() => { handleNav('quizzes'); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 text-sm font-bold rounded-3xl transition-all ${currentTab === 'quizzes' ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
+                        <Brain size={20} />
+                        Tailored Quizzes
+                    </button>
                 </nav>
 
                 <div className="p-4 border-t border-slate-200">
@@ -238,12 +248,14 @@ export const Dashboard = () => {
                                 {currentTab === 'history' && 'Interview History'}
                                 {currentTab === 'analytics' && 'Performance Analytics'}
                                 {currentTab === 'optimizer' && 'Resume Optimizer'}
+                                {currentTab === 'quizzes' && 'Tailored Quizzes'}
                             </h1>
                             <p className="text-slate-500 text-sm mt-1">
                                 {currentTab === 'home' && (interviews.length > 0 ? 'Here’s what’s happening with your preparation today.' : 'Ready to ace your next interview? Let\'s get started!')}
                                 {currentTab === 'history' && 'Review your past sessions and feedback.'}
                                 {currentTab === 'analytics' && 'Track your progress and identify areas for improvement.'}
                                 {currentTab === 'optimizer' && 'Optimize your resume for specific job descriptions.'}
+                                {currentTab === 'quizzes' && 'Target specific job requirements with AI-generated quizzes.'}
                             </p>
                         </div>
                     </div>
@@ -254,6 +266,14 @@ export const Dashboard = () => {
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 transition shadow-sm shadow-blue-500/20 active:scale-95"
                             >
                                 <Plus size={18} /> New Session
+                            </button>
+                        )}
+                        {currentTab === 'quizzes' && (
+                            <button
+                                onClick={() => setShowQuizModal(true)}
+                                className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 transition shadow-sm shadow-purple-500/20 active:scale-95"
+                            >
+                                <Plus size={18} /> New Quiz
                             </button>
                         )}
                     </div>
@@ -505,11 +525,83 @@ export const Dashboard = () => {
 
                     {currentTab === 'optimizer' && <ResumeOptimizer />}
 
+                    {currentTab === 'quizzes' && (
+                        <div className="glass-card rounded-xl p-6 animate-fade-in-up">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-lg font-bold text-slate-800">Quiz History</h3>
+                            </div>
+
+                            <div className="space-y-4">
+                                {interviews.filter(inv => inv.round_type === 'Tailored Quiz').map((inv) => {
+                                    const feedback = inv.feedback_result ? JSON.parse(inv.feedback_result) : {};
+                                    const score = feedback.score || 0;
+
+                                    return (
+                                        <div key={inv.id} className="border border-purple-100 rounded-lg p-5 flex flex-col md:flex-row justify-between items-center hover:border-purple-300 hover:shadow-md transition bg-purple-50/30 gap-4">
+                                            <div className="flex-1">
+                                                <h4 className="font-semibold text-slate-800">
+                                                    {inv.job_description.split('\n')[0].substring(0, 50)}...
+                                                </h4>
+                                                <div className="flex items-center gap-2 mt-2">
+                                                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-white text-slate-600 border border-slate-200 flex items-center gap-1">
+                                                        <Clock size={12} /> {new Date(inv.created_at || inv.date).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {inv.status === 'COMPLETED' ? (
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`text-lg font-bold ${score >= 70 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                        {score}%
+                                                    </div>
+                                                    <button
+                                                        onClick={() => navigate(`/feedback/${inv.id}`)}
+                                                        className="px-4 py-2 text-sm font-medium text-purple-600 bg-purple-100 rounded-lg hover:bg-purple-200 transition"
+                                                    >
+                                                        View Report
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => navigate(`/quiz/${inv.id}`)}
+                                                    className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition"
+                                                >
+                                                    Continue Quiz
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                {interviews.filter(inv => inv.round_type === 'Tailored Quiz').length === 0 && (
+                                    <div className="text-center py-12">
+                                        <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4 text-purple-500">
+                                            <Brain size={32} opacity={0.8} />
+                                        </div>
+                                        <h3 className="text-slate-900 font-medium mb-1">No quizzes taken yet</h3>
+                                        <p className="text-slate-500 text-sm mb-6">Test your resume skills against job requirements.</p>
+                                        <button
+                                            onClick={() => setShowQuizModal(true)}
+                                            className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-lg font-medium transition shadow-sm inline-flex items-center gap-2"
+                                        >
+                                            <Plus size={18} /> Start New Quiz
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* New Session Modal */}
                     <ScheduleInterviewModal
                         isOpen={showModal}
                         onClose={() => setShowModal(false)}
                         onStart={handleStartInterview}
+                    />
+
+                    {/* Start Quiz Modal */}
+                    <StartQuizModal
+                        isOpen={showQuizModal}
+                        onClose={() => setShowQuizModal(false)}
                     />
                 </div>
             </main>

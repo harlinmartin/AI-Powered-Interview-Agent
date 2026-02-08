@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from .. import models, database
@@ -110,6 +110,11 @@ async def upload_interview_files(
                  keywords = ["education", "experience", "skills", "project", "resume", "cv", "employment", "summary", "profile", "technical", "work"]
                  if not any(k in text_content.lower() for k in keywords):
                       raise HTTPException(status_code=400, detail="Invalid Document. Please upload a valid resume.")
+                 
+                 # FIX: Save resume text immediately
+                 new_interview.resume_text = text_content
+                 db.commit()
+                 print("DEBUG: Resume text saved synchronously.")
 
         except HTTPException:
              raise
@@ -195,6 +200,22 @@ def generate_interview_feedback(
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
 
+    # FIX: For Tailored Quiz, do NOT regenerate feedback from transcript (which is empty).
+    # Return the already generated result from submit_quiz.
+    import json
+    if interview.round_type == "Tailored Quiz":
+        if interview.feedback_result:
+            try:
+                return json.loads(interview.feedback_result)
+            except:
+                pass
+        # If no result yet, it means they haven't submitted
+        return {
+            "score": 0, 
+            "summary": "Quiz in progress or not started.",
+            "metrics": {}
+        }
+
     # Fetch Transcript
     history = db.query(models.Message).filter(models.Message.interview_id == interview_id).order_by(models.Message.id.asc()).all()
     
@@ -210,7 +231,7 @@ def generate_interview_feedback(
     # Call LLM
     import json
     try:
-        feedback_json = llm_service.generate_feedback(history, interview.job_description)
+        feedback_json = llm_service.generate_feedback(history, interview.job_description, round_type=interview.round_type)
         # Verify JSON
         try:
              json_obj = json.loads(feedback_json)
@@ -386,31 +407,71 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
         history = db.query(models.Message).filter(models.Message.interview_id == interview_id).all()
         
         if not history:
-            # Personalize Greeting
-            initial_msg = "Hello! I've reviewed your resume. Are you ready to start?"
-            try:
-                # Decode token to get user name (Naive / simple for WS)
-                from .auth import SECRET_KEY, ALGORITHM
-                from jose import jwt
-                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-                email = payload.get("sub")
-                user = db.query(models.User).filter(models.User.email == email).first()
-                if user and user.full_name:
-                    first_name = user.full_name.split()[0]
-                    
-                    # Custom Greeting for HR vs Technical
-                    if interview.round_type and interview.round_type.strip() == "HR Round":
-                        initial_msg = f"Hi {first_name}, welcome to the HR round. To get started, could you please give me a brief introduction about yourself?"
-                    else:
-                        initial_msg = f"Hi {first_name}, let's start the interview."
-            except Exception as e:
-                print(f"WS Greeting Error: {e}")
+            # Check logic for Tailored Quiz
+            if interview.round_type == "Tailored Quiz":
+                 print(f"INFO: Starting Tailored Quiz for {interview_id}")
+                 # Generate Quiz Questions
+                 import json
+                 try:
+                     questions_json = await run_in_threadpool(llm_service.generate_tailored_questions, interview.resume_text, interview.job_description, difficulty=interview.difficulty)
+                     questions = json.loads(questions_json)
+                     
+                     if isinstance(questions, dict) and "questions" in questions:
+                         questions = questions["questions"]
+                     
+                     if not questions or not isinstance(questions, list):
+                         initial_msg = "I'm ready to review your resume. Let's start with a general question: Tell me about yourself."
+                         queue = []
+                     else:
+                         initial_msg = questions[0]
+                         queue = questions[1:]
+                         
+                     # Save Initial Question
+                     db_msg = models.Message(interview_id=interview_id, role="assistant", content=initial_msg)
+                     db.add(db_msg)
+                     
+                     # Save Queue as System Message
+                     if queue:
+                         queue_msg = models.Message(interview_id=interview_id, role="system", content=f"QUIZ_QUEUE:{json.dumps(queue)}")
+                         db.add(queue_msg)
+                         
+                     db.commit()
+                     await websocket.send_json({"type": "ai_response", "content": initial_msg})
+                     
+                 except Exception as e:
+                     print(f"Error starting quiz: {e}")
+                     error_msg = "I encountered an error generating the quiz. Let's do a standard interview instead. Tell me about yourself."
+                     db_msg = models.Message(interview_id=interview_id, role="assistant", content=error_msg)
+                     db.add(db_msg)
+                     db.commit()
+                     await websocket.send_json({"type": "ai_response", "content": error_msg})
 
-            # Save AI message
-            db_msg = models.Message(interview_id=interview_id, role="assistant", content=initial_msg)
-            db.add(db_msg)
-            db.commit()
-            await websocket.send_json({"type": "ai_response", "content": initial_msg})
+            else:
+                # Personalize Greeting
+                initial_msg = "Hello! I've reviewed your resume. Are you ready to start?"
+                try:
+                    # Decode token to get user name (Naive / simple for WS)
+                    from .auth import SECRET_KEY, ALGORITHM
+                    from jose import jwt
+                    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                    email = payload.get("sub")
+                    user = db.query(models.User).filter(models.User.email == email).first()
+                    if user and user.full_name:
+                        first_name = user.full_name.split()[0]
+                        
+                        # Custom Greeting for HR vs Technical
+                        if interview.round_type and interview.round_type.strip() == "HR Round":
+                            initial_msg = f"Hi {first_name}, welcome to the HR round. To get started, could you please give me a brief introduction about yourself?"
+                        else:
+                            initial_msg = f"Hi {first_name}, let's start the interview."
+                except Exception as e:
+                    print(f"WS Greeting Error: {e}")
+    
+                # Save AI message
+                db_msg = models.Message(interview_id=interview_id, role="assistant", content=initial_msg)
+                db.add(db_msg)
+                db.commit()
+                await websocket.send_json({"type": "ai_response", "content": initial_msg})
         
         while True:
             data = await websocket.receive_json()
@@ -422,10 +483,58 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
                 db.add(user_msg)
                 db.commit()
                 
-                # 2. Get RAG Context (Offload to threadpool)
+                # 2. Check for Tailored Quiz Queue
+                if interview.round_type == "Tailored Quiz":
+                    # Check for Queue
+                    import json
+                    # Find the last QUIZ_QUEUE message
+                    # We need to query systematically
+                    # Optimization: Just look at the last system message that starts with QUIZ_QUEUE
+                    # (In a real app, we might use a dedicated column or Redis, but this works for simple state)
+                    
+                    # Get all system messages to find the queue
+                    system_msgs = db.query(models.Message).filter(
+                        models.Message.interview_id == interview_id,
+                        models.Message.role == "system",
+                        models.Message.content.like("QUIZ_QUEUE:%")
+                    ).order_by(models.Message.id.desc()).first()
+                    
+                    if system_msgs:
+                        try:
+                            queue_json = system_msgs.content.replace("QUIZ_QUEUE:", "")
+                            queue = json.loads(queue_json)
+                            
+                            if queue:
+                                next_q = queue.pop(0)
+                                # Save Next Question
+                                ai_msg_db = models.Message(interview_id=interview_id, role="assistant", content=next_q)
+                                db.add(ai_msg_db)
+                                
+                                # Update Queue (Add new system message with updated queue, simple append-only log)
+                                new_queue_msg = models.Message(interview_id=interview_id, role="system", content=f"QUIZ_QUEUE:{json.dumps(queue)}")
+                                db.add(new_queue_msg)
+                                
+                                db.commit()
+                                await websocket.send_json({"type": "ai_response", "content": next_q})
+                                continue # Skip normal LLM generation
+                            else:
+                                # Queue Empty - Finish Quiz
+                                done_msg = "That concludes the tailored quiz! Please click 'End Interview' to see your detailed results and gap analysis."
+                                ai_msg_db = models.Message(interview_id=interview_id, role="assistant", content=done_msg)
+                                db.add(ai_msg_db)
+                                db.commit()
+                                await websocket.send_json({"type": "ai_response", "content": done_msg})
+                                continue
+
+                        except Exception as e:
+                            print(f"Error processing quiz queue: {e}")
+                            # Fallback to normal RAG if queue fails
+                            pass
+                
+                # 3. Get RAG Context (Offload to threadpool)
                 context = await run_in_threadpool(get_relevant_context, user_text, interview_id)
                 
-                # 3. Get LLM Response
+                # 4. Get LLM Response
                 # Fetch fresh history (including new user msg)
                 history = db.query(models.Message).filter(models.Message.interview_id == interview_id).all()
                 
@@ -502,8 +611,100 @@ async def websocket_endpoint(websocket: WebSocket, interview_id: int, token: str
 
     except WebSocketDisconnect:
         print(f"Client disconnected: {interview_id}")
-    except Exception as e:
-        print(f"CRITICAL ERROR in WebSocket: {e}")
         import traceback
         traceback.print_exc()
         await websocket.close()
+
+@router.post("/{interview_id}/start_quiz")
+async def start_quiz(interview_id: int, db: Session = Depends(database.get_db), current_user: models.User = Depends(get_current_user)):
+    interview = db.query(models.Interview).filter(models.Interview.id == interview_id).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+        
+    # Check if quiz already generated
+    import json
+    if interview.feedback_result and "questions" in interview.feedback_result:
+        try:
+            # Check if it looks like the new MCQ format (has "options")
+            data = json.loads(interview.feedback_result)
+            if isinstance(data, dict) and "questions" in data:
+                 questions = data["questions"]
+                 if len(questions) > 0 and "options" in questions[0]:
+                     return data
+        except:
+            pass
+            
+    # Generate Questions
+    try:
+        if not interview.resume_text:
+             raise HTTPException(status_code=400, detail="Resume not found")
+
+        questions_json = await run_in_threadpool(
+            llm_service.generate_tailored_questions, 
+            interview.resume_text, 
+            interview.job_description,
+            interview.difficulty
+        )
+        
+        # Save to DB (using feedback_result as storage for the quiz definition)
+        interview.feedback_result = questions_json
+        db.commit()
+        
+        # Parse and return
+        return json.loads(questions_json)
+    except Exception as e:
+        print(f"Quiz Gen Error: {e}")
+        # Return mock for now if LLM fails
+        return {
+            "questions": [
+                {
+                    "id": 1,
+                    "question": "Which HTTP method is idempotent?",
+                    "options": ["POST", "PUT", "PATCH", "CONNECT"],
+                    "correct_answer": "PUT",
+                    "explanation": "PUT is idempotent because..."
+                }
+            ]
+        }
+
+@router.post("/{interview_id}/submit_quiz")
+async def submit_quiz(interview_id: int, request: Request, db: Session = Depends(database.get_db)):
+    # Note: We use Request to get raw JSON body
+    data = await request.json()
+    
+    interview = db.query(models.Interview).filter(models.Interview.id == interview_id).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    # Save to feedback_result
+    # We store the entire JSON payload which contains score, detailed_q_and_a, etc.
+    import json
+    
+    # Generate Qualitative Feedback
+    try:
+        feedback_json = await run_in_threadpool(
+            llm_service.generate_quiz_feedback,
+            data,
+            interview.job_description
+        )
+        feedback_data = json.loads(feedback_json)
+        # Merge feedback into data
+        data.update(feedback_data)
+    except Exception as e:
+        print(f"Quiz Feedback Generation Failed: {e}")
+        # Add fallbacks
+        data.update({
+            "summary": "Quiz completed. Review your detailed answers below.",
+            "strengths": [],
+            "weaknesses": [],
+            "suggestions": []
+        })
+
+    interview.feedback_result = json.dumps(data)
+    
+    # Also mark as completed if not already
+    interview.status = "COMPLETED"
+    
+    db.commit()
+    
+    return {"message": "Quiz submitted successfully"}

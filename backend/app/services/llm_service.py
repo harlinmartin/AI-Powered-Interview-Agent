@@ -518,7 +518,89 @@ Responsibilities include tasks typical for {role_name} positions."""
             print(f"Error optimizing resume: {e}")
             return '{"error": "Optimization failed"}'
 
-    def generate_feedback(self, transcript_messages: List[models.Message], job_description: str) -> str:
+    def generate_tailored_questions(self, resume_text: str, job_description: str, difficulty: str = "Medium") -> str:
+        if not self.client:
+             # Return mock data for testing (only if no key)
+             mock_q = []
+             for i in range(1, 11):
+                 mock_q.append({
+                     "id": i,
+                     "question": f"Mock Question {i} for {difficulty} level.",
+                     "options": ["A", "B", "C", "D"],
+                     "correct_answer": "A",
+                     "explanation": "Mock explanation."
+                 })
+             import json
+             return json.dumps({"questions": mock_q})
+
+        if difficulty == "Easy":
+            difficulty_prompt = "Keep questions fundamental and definition-based."
+        elif difficulty == "Medium":
+            difficulty_prompt = "Focus on practical implementation and best practices."
+        elif difficulty == "Difficult":
+            difficulty_prompt = "Focus on system design, trade-offs, and edge cases."
+
+        system_prompt = """You are an expert Technical Interviewer creating a Multiple Choice Quiz (MCQ) to verify a candidate's resume against a Job Description.
+
+        JOB DESCRIPTION:
+        {job_description}
+
+        CANDIDATE'S RESUME:
+        {resume_text}
+        
+        DIFFICULTY: {difficulty}
+        GUIDANCE: {difficulty_prompt}
+
+        YOUR TASK:
+        1. Create EXACTLY 10 MCQ questions.
+        2. Questions must be based on the intersection of the Resume skills and the Job Description requirements.
+        3. If the resume is missing skills required by the JD, ask about those JD requirements to test knowledge.
+        4. Provide 4 distinct options for each question.
+        5. Provide a clear explanation for the correct answer.
+
+        OUTPUT FORMAT:
+        Return a JSON Object with a key "questions" containing an array of 10 objects.
+        
+        {{
+            "questions": [
+                {{
+                    "id": 1,
+                    "question": "Question text...",
+                    "options": ["Option A", "Option B", "Option C", "Option D"],
+                    "correct_answer": "Option A",
+                    "explanation": "Detailed explanation..."
+                }},
+                ...
+            ]
+        }}
+        
+        RULES:
+        - Output strictly VALID JSON.
+        - Do not add markdown formatting (```json).
+        """
+        
+        prompt = system_prompt.format(job_description=job_description, resume_text=resume_text, difficulty=difficulty, difficulty_prompt=difficulty_prompt)
+
+        messages = [
+            {"role": "system", "content": "You are a specific MCQ generator. Output valid JSON only."},
+            {"role": "user", "content": prompt}
+        ]
+
+        try:
+            completion = self.client.chat.completions.create(
+                messages=messages,
+                model="llama-3.3-70b-versatile",
+                response_format={"type": "json_object"},
+                max_tokens=2048
+            )
+            content = completion.choices[0].message.content
+            print(f"DEBUG: Quiz Generation Length: {len(content)}")
+            return content
+        except Exception as e:
+            print(f"Error generating quiz: {e}")
+            return '{"questions": []}'
+
+    def generate_feedback(self, transcript_messages: List[models.Message], job_description: str, round_type: str = "Technical") -> str:
         if not self.client:
              return '{"score": 50, "metrics": {"technical": 50, "communication": 50, "problem_solving": 50, "confidence": 50}, "summary": "Mock Feedback - No API Key", "strengths": ["None"], "weaknesses": ["None"], "suggestions": ["Check API Key"]}'
 
@@ -545,51 +627,86 @@ Responsibilities include tasks typical for {role_name} positions."""
              return '{"score": 0, "metrics": {"technical": 0, "communication": 0, "problem_solving": 0, "confidence": 0}, "summary": "The interview was too short to generate a valid score. Please complete at least 3-4 exchanges.", "strengths": ["N/A"], "weaknesses": ["Interview incomplete"], "suggestions": ["Please retry properly."]}'
 
 
-        system_prompt = """You are an Expert Interview Coach with STRICT grading standards.
-        
-        JOB DESCRIPTION:
-        {job_description}
+        if round_type == "Tailored Quiz":
+             system_prompt = """You are a Technical Evaluator grading a specific Quiz.
+             
+             JOB DESCRIPTION:
+             {job_description}
+             
+             TRANSCRIPT (Quiz Questions & Answers):
+             {transcript_text}
+             
+             TASK:
+             For EACH Question asked by the Assistant:
+             1. Identify the User's Answer.
+             2. Generate the **Ideal Technical Answer**.
+             3. Compare them (Gap Analysis).
+             
+             OUTPUT JSON:
+             {{
+                 "score": <0-100>,
+                 "summary": "Overall summary...",
+                 "detailed_q_and_a": [
+                     {{
+                         "question": "The question asked...",
+                         "user_answer": "What the user said...",
+                         "ideal_answer": "The correct technical answer...",
+                         "gap_analysis": "Critique of user's answer vs ideal..."
+                     }}
+                 ],
+                 "metrics": {{ "technical": <int>, "communication": <int>, "problem_solving": <int>, "confidence": <int> }},
+                 "strengths": ["list"],
+                 "weaknesses": ["list"],
+                 "suggestions": ["list"]
+             }}
+             """
+        else:
+            # ORIGINAL LOGIC for Standard Interviews
+            system_prompt = """You are an Expert Interview Coach with STRICT grading standards.
+            
+            JOB DESCRIPTION:
+            {job_description}
 
-        INTERVIEW TRANSCRIPT:
-        {transcript_text}
+            INTERVIEW TRANSCRIPT:
+            {transcript_text}
 
-        **CRITICAL SCORING RULES (MUST FOLLOW)**:
-        
-        1. **STEP 1: COUNT CODE SUBMISSIONS**:
-           - Scan the transcript for "CODE SUBMISSION" blocks.
-           - **Count distinct answers**: How many SEPARATE questions were answered with actual code?
-        
-        2. **STEP 2: APPLY PENALTY (NON-NEGOTIABLE)**:
-           - If 2 questions were asked but you found ONLY 1 code submission: **SCORE MUST BE < 50%**.
-             - *Reason*: "Incomplete Interview - Missed Question 2".
-             - Do NOT hallucinate that they "did well" on the missing question.
-           - If 0 questions completed: **SCORE = 0%**.
-           - If code is present but just comments/partial: **SCORE = 10-20%**.
-        
-        3. **STEP 3: QUALITY GRADING** (Only rule if BOTH questions were attempted):
-           - **90-100%**: Both questions solved correctly with good code quality.
-           - **70-89%**: Both questions attempted, 1 fully correct, 1 partial.
-           - **50-69%**: Only 1 question fully solved out of 2 (but 2nd was at least attempted).
-           
-        4. **VERBAL ROUND**: If this is NOT a coding round (no "CODE SUBMISSION" tags), ignore the above and grade normally on communication.
+            **CRITICAL SCORING RULES (MUST FOLLOW)**:
+            
+            1. **STEP 1: COUNT CODE SUBMISSIONS**:
+               - Scan the transcript for "CODE SUBMISSION" blocks.
+               - **Count distinct answers**: How many SEPARATE questions were answered with actual code?
+            
+            2. **STEP 2: APPLY PENALTY (NON-NEGOTIABLE)**:
+               - If 2 questions were asked but you found ONLY 1 code submission: **SCORE MUST BE < 50%**.
+                 - *Reason*: "Incomplete Interview - Missed Question 2".
+                 - Do NOT hallucinate that they "did well" on the missing question.
+               - If 0 questions completed: **SCORE = 0%**.
+               - If code is present but just comments/partial: **SCORE = 10-20%**.
+            
+            3. **STEP 3: QUALITY GRADING** (Only rule if BOTH questions were attempted):
+               - **90-100%**: Both questions solved correctly with good code quality.
+               - **70-89%**: Both questions attempted, 1 fully correct, 1 partial.
+               - **50-69%**: Only 1 question fully solved out of 2 (but 2nd was at least attempted).
+               
+            4. **VERBAL ROUND**: If this is NOT a coding round (no "CODE SUBMISSION" tags), ignore the above and grade normally on communication.
 
-        Output ONLY valid JSON:
-        {{
-            "score": <0-100 overall>,
-            "metrics": {{
-                "technical": <0-100>,
-                "communication": <0-100>,
-                "problem_solving": <0-100>,
-                "confidence": <0-100>
-            }},
-            "feedback_type": "CODING" | "VERBAL",
-            "summary": "2-3 sentences summary.",
-            "code_feedback": "CRITICAL: Detailed analysis. IF CODING ROUND: Line-by-line code review (e.g. 'Line 10: O(n^2) loop'). IF VERBAL ROUND: Detailed performance critique (e.g. 'Your explanation of CAP Theorem lacked nuance on Partition Tolerance. You demonstrated good high-level understanding but missed specific trade-offs.').",
-            "strengths": ["list"],
-            "weaknesses": ["list"],
-            "suggestions": ["list"]
-        }}
-        """
+            Output ONLY valid JSON:
+            {{
+                "score": <0-100 overall>,
+                "metrics": {{
+                    "technical": <0-100>,
+                    "communication": <0-100>,
+                    "problem_solving": <0-100>,
+                    "confidence": <0-100>
+                }},
+                "feedback_type": "CODING" | "VERBAL",
+                "summary": "2-3 sentences summary.",
+                "code_feedback": "CRITICAL: Detailed analysis. IF CODING ROUND: Line-by-line code review (e.g. 'Line 10: O(n^2) loop'). IF VERBAL ROUND: Detailed performance critique (e.g. 'Your explanation of CAP Theorem lacked nuance on Partition Tolerance. You demonstrated good high-level understanding but missed specific trade-offs.').",
+                "strengths": ["list"],
+                "weaknesses": ["list"],
+                "suggestions": ["list"]
+            }}
+            """
 
         
         prompt = system_prompt.format(job_description=job_description, transcript_text=transcript_text)
@@ -609,6 +726,61 @@ Responsibilities include tasks typical for {role_name} positions."""
         except Exception as e:
             print(f"Error generating feedback: {e}")
             return '{"error": "Feedback generation failed"}'
+
+    def generate_quiz_feedback(self, quiz_results: dict, job_description: str) -> str:
+        """
+        Generates qualitative feedback (summary, strengths, weaknesses) based on MCQ results.
+        quiz_results: { score: int, detailed_q_and_a: [ { question, user_answer, correct_answer, explanation } ] }
+        """
+        if not self.client:
+             return '{"summary": "Mock Quiz Feedback", "strengths": ["Mock Strength"], "weaknesses": ["Mock Weakness"], "suggestions": ["Study Mock Material"]}'
+
+        system_prompt = """You are an Interview Coach analyzing a Technical MCQ Quiz.
+        
+        JOB DESCRIPTION:
+        {job_description}
+        
+        QUIZ RESULTS:
+        Score: {score}%
+        
+        DETAILS:
+        {details}
+        
+        YOUR TASK:
+        Generate a JSON feedback report.
+        
+        JSON STRUCTURE:
+        {{
+            "summary": "2-3 sentences summarizing performance.",
+            "strengths": ["List of topics they got right"],
+            "weaknesses": ["List of topics they got wrong"],
+            "suggestions": ["Specific study recommendations based on missed questions"]
+        }}
+        """
+        
+        # Format details for prompt
+        details_text = ""
+        for item in quiz_results.get("detailed_q_and_a", []):
+            status = "CORRECT" if item.get("user_answer") == item.get("correct_answer") else "WRONG"
+            details_text += f"- Q: {item.get('question')} | Status: {status} | Topic: {item.get('explanation')[:50]}...\n"
+            
+        prompt = system_prompt.format(job_description=job_description, score=quiz_results.get("score", 0), details=details_text)
+        
+        messages = [
+            {"role": "system", "content": "You are a Quiz Analyst. Output valid JSON only."},
+            {"role": "user", "content": prompt}
+        ]
+        
+        try:
+            completion = self.client.chat.completions.create(
+                messages=messages,
+                model="llama-3.3-70b-versatile",
+                response_format={"type": "json_object"}
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(f"Error generating quiz feedback: {e}")
+            return '{"summary": "Feedback generation failed", "strengths": [], "weaknesses": [], "suggestions": []}'
 
     def generate_transition_message(self, history: List[models.Message], last_user_message: str, job_description: str) -> str:
         if not self.client:

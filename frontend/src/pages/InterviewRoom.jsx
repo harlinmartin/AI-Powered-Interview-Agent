@@ -7,6 +7,7 @@ import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognitio
 import { useTTS } from '../hooks/useTTS';
 import { useDeepgramSpeech } from '../hooks/useDeepgramSpeech';
 import { useAuthStore } from '../store/useAuthStore';
+import { useInterviewStore } from '../store/useInterviewStore';
 import {
     Mic, MicOff, PhoneOff, Video, VideoOff,
     Monitor, Captions, PlayCircle, Code, Sparkles, ArrowLeft
@@ -16,6 +17,24 @@ import { ProfessionalWorkspace } from '../components/ProfessionalWorkspace';
 export const InterviewRoom = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const token = useAuthStore(state => state.token);
+    const { interviews, fetchInterviews } = useInterviewStore();
+    const currentInterview = interviews.find(i => i.id === Number(id)) || interviews.find(i => i.id === id);
+    const isQuizMode = currentInterview?.round_type === 'Tailored Quiz';
+
+    // Redirect if in Quiz Mode (should be handled by QuizActive page)
+    useEffect(() => {
+        if (isQuizMode && id) {
+            navigate(`/quiz/${id}`, { replace: true });
+        }
+    }, [isQuizMode, id, navigate]);
+
+    useEffect(() => {
+        if (!currentInterview && token) {
+            fetchInterviews();
+        }
+    }, [id, token, currentInterview, fetchInterviews]);
+
     const videoRef = useRef(null);
     const wsRef = useRef(null); // Changed to Ref
 
@@ -26,7 +45,7 @@ export const InterviewRoom = () => {
     // UX State
     const [started, setStarted] = useState(false);
     const [showCaptions, setShowCaptions] = useState(false);
-    const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+    const [isVideoEnabled, setIsVideoEnabled] = useState(!isQuizMode);
     const [isMuted, setIsMuted] = useState(false);
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [showCodeEditor, setShowCodeEditor] = useState(false);
@@ -42,7 +61,7 @@ export const InterviewRoom = () => {
     // Voice Hooks
     const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition, isMicrophoneAvailable } = useSpeechRecognition();
     const { speak, cancel: cancelTTS, speaking: aiSpeaking } = useTTS();
-    const [aiResponse, setAiResponse] = useState("Connected. Waiting for you to start...");
+    const [aiResponse, setAiResponse] = useState(isQuizMode ? "Generating your tailored quiz..." : "Connected. Waiting for you to start...");
     const [lastQuestion, setLastQuestion] = useState(null); // NEW: Track last AI question for validation
 
     // Deepgram State
@@ -76,7 +95,7 @@ export const InterviewRoom = () => {
     const [thinkTime, setThinkTime] = useState(0);
     const [aiThinking, setAiThinking] = useState(false); // Added missing state
 
-    const token = useAuthStore(state => state.token);
+    // const token = useAuthStore(state => state.token); // MOVED TO TOP
 
     // ================= EFFECT HOOKS =================
 
@@ -125,8 +144,13 @@ export const InterviewRoom = () => {
                         setIsScreenSharing(false);
                     };
                 } else {
-                    // CHANGED: Request audio: true to share stream with Deepgram
-                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    // Quiz Mode: Audio Only
+                    // Standard: Audio + Video
+                    const constraints = {
+                        audio: true,
+                        video: !isQuizMode
+                    };
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
                 }
 
                 if (videoRef.current) {
@@ -463,9 +487,14 @@ export const InterviewRoom = () => {
                     <div className="mb-6 bg-blue-900/30 w-20 h-20 rounded-full flex items-center justify-center mx-auto text-blue-400">
                         <Mic size={40} />
                     </div>
-                    <h1 className="text-3xl font-bold mb-3 text-white">Ready to Start?</h1>
+                    <h1 className="text-3xl font-bold mb-3 text-white">
+                        {isQuizMode ? 'Your Quiz is Ready' : 'Ready to Start?'}
+                    </h1>
                     <p className="text-gray-400 mb-8 leading-relaxed">
-                        The AI Interviewer is ready. Check your camera and microphone.
+                        {isQuizMode
+                            ? "The AI has analyzed your resume and prepared specific questions. Click Start to begin."
+                            : "The AI Interviewer is ready. Check your camera and microphone."
+                        }
                     </p>
                     <button
                         onClick={() => {
@@ -477,7 +506,7 @@ export const InterviewRoom = () => {
                         }}
                         className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-blue-500/20 transition-all transform hover:scale-[1.02]"
                     >
-                        Start Interview
+                        Start {isQuizMode ? 'Quiz' : 'Interview'}
                     </button>
                     <p className="mt-4 text-xs text-gray-500">Allow Camera & Screen Share permissions when prompted.</p>
                 </div>
@@ -550,7 +579,7 @@ export const InterviewRoom = () => {
 
                         {/* The Orb */}
                         <div className={`relative flex items-center justify-center transition-all duration-500 ${showCodeEditor ? 'w-32 h-32' : 'w-64 h-64'}`}>
-                            
+
                             {/* Audio Visualizer Overlay */}
                             {mediaStream && !aiSpeaking && !aiThinking && (
                                 <div className="absolute inset-0 z-30 flex items-center justify-center scale-150">
@@ -684,8 +713,21 @@ export const InterviewRoom = () => {
 
             {/* RIGHT: User Video & Controls */}
             <div className="flex-1 bg-black rounded-[2.5rem] overflow-hidden relative border border-white/60 flex flex-col shadow-soft min-h-0">
-                <div className="relative flex-1 bg-gray-900 min-h-0">
-                    <video ref={videoRef} autoPlay muted playsInline className={`w-full h-full object-cover ${!isScreenSharing ? 'transform scale-x-[-1]' : ''}`} />
+                <div className="relative flex-1 bg-gray-900 min-h-0 flex flex-col items-center justify-center">
+                    {/* Video Element - Hidden if Quiz Mode */}
+                    {!isQuizMode ? (
+                        <video ref={videoRef} autoPlay muted playsInline className={`w-full h-full object-cover ${!isScreenSharing ? 'transform scale-x-[-1]' : ''}`} />
+                    ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center animate-fade-in">
+                            <div className="bg-purple-900/20 p-6 rounded-full mb-6 border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.2)]">
+                                <Code size={48} className="text-purple-400" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-white mb-2">Quiz in Progress</h3>
+                            <p className="text-gray-400 max-w-md">
+                                The AI is asking questions based on your resume. Speak your answer clearly or use the text input below.
+                            </p>
+                        </div>
+                    )}
 
                     {/* Media Error Overlay */}
                     {mediaError && (
@@ -736,14 +778,16 @@ export const InterviewRoom = () => {
                         {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
                     </button>
 
-                    {/* Video Toggle */}
-                    <button
-                        onClick={() => setIsVideoEnabled(!isVideoEnabled)}
-                        className={`p-4 rounded-full transition-all hover:scale-110 ${!isVideoEnabled ? 'bg-red-500 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
-                        title={!isVideoEnabled ? "Turn On Camera" : "Turn Off Camera"}
-                    >
-                        {!isVideoEnabled ? <VideoOff size={22} /> : <Video size={22} />}
-                    </button>
+                    {/* Video Toggle - Hidden in Quiz Mode */}
+                    {!isQuizMode && (
+                        <button
+                            onClick={() => setIsVideoEnabled(!isVideoEnabled)}
+                            className={`p-4 rounded-full transition-all hover:scale-110 ${!isVideoEnabled ? 'bg-red-500 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                            title={!isVideoEnabled ? "Turn On Camera" : "Turn Off Camera"}
+                        >
+                            {!isVideoEnabled ? <VideoOff size={22} /> : <Video size={22} />}
+                        </button>
+                    )}
 
                     <div className="w-px h-8 bg-gray-700 mx-2 hidden sm:block"></div>
 

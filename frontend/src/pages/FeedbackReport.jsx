@@ -111,61 +111,96 @@ export const FeedbackReport = () => {
 
 
 
+                {/* Quiz Analysis Section */}
+                {data?.detailed_q_and_a && data.detailed_q_and_a.length > 0 && (
+                    <div className="bg-gray-900 rounded-3xl p-8 border border-gray-800 shadow-2xl mb-8">
+                        <h3 className="text-xl font-bold text-purple-400 mb-6 flex items-center gap-2">
+                            <BookOpen size={24} /> Detailed Quiz Analysis
+                        </h3>
+                        <div className="space-y-6">
+                            {data.detailed_q_and_a.map((item, index) => (
+                                <div key={index} className="bg-gray-800/50 rounded-xl p-6 border border-gray-700 hover:border-purple-500/30 transition">
+                                    <h4 className="font-semibold text-white mb-4 flex gap-3">
+                                        <span className="bg-purple-900/50 text-purple-300 px-3 py-1 rounded-lg text-sm h-fit">Q{index + 1}</span>
+                                        {item.question}
+                                    </h4>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-800">
+                                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Your Answer</span>
+                                            <p className="text-gray-300 text-sm whitespace-pre-wrap">{item.user_answer || "No answer provided"}</p>
+                                        </div>
+
+                                        <div className="bg-emerald-900/10 p-4 rounded-lg border border-emerald-900/30">
+                                            <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2 block">Ideal Answer</span>
+                                            <p className="text-emerald-100/80 text-sm whitespace-pre-wrap">{item.ideal_answer}</p>
+                                        </div>
+                                    </div>
+
+                                    {item.gap_analysis && (
+                                        <div className="mt-4 bg-amber-900/10 p-4 rounded-lg border border-amber-900/30">
+                                            <span className="text-xs font-bold text-amber-500 uppercase tracking-wider mb-2 block">Feedback & Gap Analysis</span>
+                                            <p className="text-amber-100/80 text-sm">{item.gap_analysis}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* Grid Layout */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                     {/* Strengths */}
-                    <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800">
-                        <h3 className="text-xl font-bold text-green-400 mb-4 flex items-center gap-2">
-                            <CheckCircle size={24} /> Key Strengths
-                        </h3>
-                        <ul className="space-y-3">
-                            {(data?.strengths || []).map((s, i) => (
-                                <li key={i} className="flex gap-3 text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
-                                    <span className="text-green-500 font-bold">•</span>
-                                    {s}
-                                </li>
-                            ))}
-                            {(!data?.strengths || data.strengths.length === 0) && (
-                                <li className="text-gray-500 italic">No specific strengths listed.</li>
-                            )}
-                        </ul>
-                    </div>
+                    {data?.strengths?.length > 0 && (
+                        <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+                            <h3 className="text-xl font-bold text-green-400 mb-4 flex items-center gap-2">
+                                <CheckCircle size={24} /> Key Strengths
+                            </h3>
+                            <ul className="space-y-3">
+                                {data.strengths.map((s, i) => (
+                                    <li key={i} className="flex gap-3 text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+                                        <span className="text-green-500 font-bold">•</span>
+                                        {s}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
 
                     {/* Weaknesses */}
-                    <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800">
-                        <h3 className="text-xl font-bold text-red-400 mb-4 flex items-center gap-2">
-                            <AlertTriangle size={24} /> Areas for Improvement
-                        </h3>
-                        <ul className="space-y-3">
-                            {(data?.weaknesses || []).map((w, i) => (
-                                <li key={i} className="flex gap-3 text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
-                                    <span className="text-red-500 font-bold">•</span>
-                                    {w}
-                                </li>
-                            ))}
-                            {(!data?.weaknesses || data.weaknesses.length === 0) && (
-                                <li className="text-gray-500 italic">No specific weaknesses listed.</li>
-                            )}
-                        </ul>
-                    </div>
+                    {data?.weaknesses?.length > 0 && (
+                        <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+                            <h3 className="text-xl font-bold text-red-400 mb-4 flex items-center gap-2">
+                                <AlertTriangle size={24} /> Areas for Improvement
+                            </h3>
+                            <ul className="space-y-3">
+                                {data.weaknesses.map((w, i) => (
+                                    <li key={i} className="flex gap-3 text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+                                        <span className="text-red-500 font-bold">•</span>
+                                        {w}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
 
                     {/* Study Plan */}
-                    <div className="bg-blue-900/10 p-6 rounded-2xl border border-blue-900/30 col-span-1 md:col-span-2">
-                        <h3 className="text-xl font-bold text-blue-400 mb-4 flex items-center gap-2">
-                            <BookOpen size={24} /> Recommended Study Plan
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {(data?.suggestions || []).map((s, i) => (
-                                <div key={i} className="bg-gray-900 p-4 rounded-xl border border-blue-900/30 hover:border-blue-500 transition">
-                                    <p className="text-gray-300 font-medium">{s}</p>
-                                </div>
-                            ))}
-                            {(!data?.suggestions || data.suggestions.length === 0) && (
-                                <p className="text-gray-500 italic col-span-3 text-center">No specific study plan generated.</p>
-                            )}
+                    {data?.suggestions?.length > 0 && (
+                        <div className="bg-blue-900/10 p-6 rounded-2xl border border-blue-900/30 col-span-1 md:col-span-2">
+                            <h3 className="text-xl font-bold text-blue-400 mb-4 flex items-center gap-2">
+                                <BookOpen size={24} /> Recommended Study Plan
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {data.suggestions.map((s, i) => (
+                                    <div key={i} className="bg-gray-900 p-4 rounded-xl border border-blue-900/30 hover:border-blue-500 transition">
+                                        <p className="text-gray-300 font-medium">{s}</p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                 </div>
             </div>

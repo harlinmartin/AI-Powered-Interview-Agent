@@ -8,6 +8,7 @@ import 'regenerator-runtime/runtime';
 import { InterviewRoom } from './pages/InterviewRoom';
 import { CodingTest } from './pages/CodingTest';
 import { FeedbackReport } from './pages/FeedbackReport';
+import { QuizActive } from './pages/QuizActive';
 
 function ProtectedRoute({ children }) {
     const token = useAuthStore((state) => state.token);
@@ -47,6 +48,15 @@ function App() {
                         </ProtectedRoute>
                     }
                 />
+
+                <Route
+                    path="/quiz/:id"
+                    element={
+                        <ProtectedRoute>
+                            <QuizActive />
+                        </ProtectedRoute>
+                    }
+                />
                 <Route
                     path="/feedback/:id"
                     element={
@@ -57,7 +67,7 @@ function App() {
                 />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
             </Routes>
-        </Router>
+        </Router >
     );
 }
 

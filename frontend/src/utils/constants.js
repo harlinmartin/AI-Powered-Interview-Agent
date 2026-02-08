@@ -21,5 +21,6 @@ export const ROUND_TYPES = [
     "HR Round",
     "Coding",
     "System Design",
-    "Communication"
+    "Communication",
+    "Tailored Quiz"
 ];
